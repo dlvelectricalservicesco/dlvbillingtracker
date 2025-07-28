@@ -89,7 +89,7 @@
 
         // Define Firebase config globally for the React script to access
         // API Key is intentionally left empty; Canvas will inject it at runtime.
-        window.firebaseConfig = {
+        window.__firebase_config = { // Changed to window.__firebase_config
             apiKey: "AIzaSyD7LhkerFn3EAMRDIE0Da-ko2Cw7lKg6OQ",
             authDomain: "dlvbilling-448fc.firebaseapp.com",
             projectId: "dlvbilling-448fc",
@@ -138,7 +138,8 @@
             const ReactDOM = window.ReactDOM; // Explicitly get ReactDOM from the window object
 
             // Access Firebase functions and config from the global window object
-            const firebaseConfig = window.firebaseConfig;
+            // Correctly access __firebase_config from window
+            const firebaseConfig = window.__firebase_config;
             const __app_id = window.__app_id;
             const __initial_auth_token = window.__initial_auth_token;
             const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, getFirestore, collection, addDoc, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc, getStorage, ref, uploadBytes, getDownloadURL } = window.firebase;
@@ -1458,7 +1459,7 @@
                                                 )}
                                             </tr>
                                         </thead>
-                                        <tbody className="bg-white divide-y divide-gray-200">
+                                        <tbody className="bg-white divide-y divide-200">
                                             {project.contractAdditions.map((additional, index) => (
                                                 <tr key={index}>
                                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{additional.date}</td>
@@ -3302,9 +3303,9 @@
                 useEffect(() => {
                     const initializeFirebase = async () => {
                         try {
-                            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-                            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-                            const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                            const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-app-id'; // Access from window
+                            const firebaseConfig = typeof window.__firebase_config !== 'undefined' ? window.__firebase_config : {}; // Access from window
+                            const initialAuthToken = typeof window.__initial_auth_token !== 'undefined' ? window.__initial_auth_token : null; // Access from window
 
                             if (Object.keys(firebaseConfig).length === 0) {
                                 throw new Error("Firebase configuration is missing. Please ensure __firebase_config is set.");
