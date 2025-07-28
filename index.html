@@ -1525,7 +1525,7 @@
                     letterBodyParagraph: '',
                     signatoryName: '',
                     signatoryTitle: '',
-                    logoUrl: '',
+                    logoUrl: '', // Initialize as empty string
                     defaultProjectName: 'Sample Project',
                     defaultLocation: 'Sample Location',
                     defaultSubject: 'Sample Subject',
@@ -1548,25 +1548,41 @@
                             const docSnap = await getDoc(templateDocRef);
                             if (docSnap.exists()) {
                                 const data = docSnap.data();
-                                const filteredData = { ...data };
-                                delete filteredData.headerElectricalSupply;
-                                delete filteredData.headerSupplyDetails;
-                                delete filteredData.defaultRetention;
-                                delete filteredData.defaultRecoupment;
-                                delete filteredData.defaultPartialPayments;
-                                setTemplateData(prev => ({ ...prev, ...filteredData }));
-                            } else {
+                                // Merge fetched data with current state, ensuring defaults are applied if fields are missing in DB
                                 setTemplateData(prev => ({
-                                    ...prev,
+                                    ...prev, // Keep existing state values not explicitly overwritten by data
+                                    ...data, // Overwrite with fetched data
+                                    // Ensure default preview fields are handled correctly (they are not saved to DB, only for local state)
+                                    defaultProjectName: data.defaultProjectName || 'Sample Project',
+                                    defaultLocation: data.defaultLocation || 'Sample Location',
+                                    defaultSubject: data.defaultSubject || 'Sample Subject',
+                                    defaultPoNumber: data.defaultPoNumber || 'PO-XXXX',
+                                    defaultDate: data.defaultDate || new Date().toISOString().slice(0, 10),
+                                    defaultAttention: data.defaultAttention || 'Mr./Ms. Client Representative',
+                                    defaultBilledAmount: data.defaultBilledAmount || 100000,
+                                    defaultDescriptionOfWork: data.defaultDescriptionOfWork || 'General electrical works',
+                                }));
+                                console.log("Template data fetched from Firebase:", data);
+                            } else {
+                                // Set default values if no template exists in Firebase
+                                setTemplateData({
                                     companyName: "D.L.Verano's Electrical Supply and Services",
-                                    // Default values for new template or if not found
                                     address: "72 BULELAK ST. MALANDAY, MARIKINA CITY",
                                     email: "dl_verano@yahoo.com",
                                     letterBodyParagraph: "We are submitting herewith a billing for the above subject for the supply of labor, materials & supervision for a partial work accomplishment computed as follows:",
                                     signatoryName: "ENGR. DANTE L. VERANO",
                                     signatoryTitle: "General Manager",
-                                    logoUrl: "https://storage.googleapis.com/bard-files/uploaded:DLVESS_LOGO-removebg-preview.png-06d07e7a-8081-4933-9d15-f0d91ff24150",
-                                }));
+                                    logoUrl: "", // Default to empty string if no template exists
+                                    defaultProjectName: 'Sample Project',
+                                    defaultLocation: 'Sample Location',
+                                    defaultSubject: 'Sample Subject',
+                                    defaultPoNumber: 'PO-XXXX',
+                                    defaultDate: new Date().toISOString().slice(0, 10),
+                                    defaultAttention: 'Mr./Ms. Client Representative',
+                                    defaultBilledAmount: 100000,
+                                    defaultDescriptionOfWork: 'General electrical works',
+                                });
+                                console.log("No template found in Firebase, setting defaults.");
                             }
                         } catch (err) {
                             console.error("Error fetching template:", err);
@@ -1592,14 +1608,17 @@
                         reader.onloadend = () => {
                             setTemplateData(prev => ({ ...prev, logoUrl: reader.result }));
                             showToast('Logo image loaded!', 'success');
+                            console.log("Logo updated in state:", reader.result.substring(0, 50) + "..."); // Log first 50 chars of Base64
                         };
                         reader.onerror = () => {
                             showToast('Failed to read logo image.', 'error');
                             setTemplateData(prev => ({ ...prev, logoUrl: '' }));
+                            console.error("Failed to read logo file.");
                         };
                         reader.readAsDataURL(file);
                     } else {
                         setTemplateData(prev => ({ ...prev, logoUrl: '' }));
+                        showToast('Logo image cleared.', 'info');
                     }
                 };
 
@@ -1628,6 +1647,7 @@
                         delete dataToSave.defaultPartialPayments;
 
 
+                        console.log("Saving template data to Firebase:", dataToSave); // Add this log
                         await setDoc(templateDocRef, dataToSave, { merge: true });
                         setMessage({ type: 'success', text: 'Template saved successfully!' });
                         showToast('Template saved successfully!', 'success');
@@ -1837,7 +1857,7 @@
                                     letterBodyParagraph: "We are submitting herewith a billing for the above subject for the supply of labor, materials & supervision for a partial work accomplishment computed as follows:",
                                     signatoryName: "ENGR. DANTE L. VERANO",
                                     signatoryTitle: "General Manager",
-                                    logoUrl: "https://storage.googleapis.com/bard-files/uploaded:DLVESS_LOGO-removebg-preview.png-06d07e7a-8081-4933-9d15-f0d91ff24150", // Default logo
+                                    logoUrl: "", // Default logo to empty
                                 });
                             }
                         } catch (err) {
@@ -1851,7 +1871,7 @@
                                 letterBodyParagraph: "We are submitting herewith a billing for the above subject for the supply of labor, materials & supervision for a partial work accomplishment computed as follows:",
                                 signatoryName: "ENGR. DANTE L. VERANO",
                                 signatoryTitle: "General Manager",
-                                logoUrl: "https://storage.googleapis.com/bard-files/uploaded:DLVESS_LOGO-removebg-preview.png-06d07e7a-8081-4933-9d15-f0d91ff24150", // Default logo
+                                logoUrl: "", // Default logo to empty
                             });
                         } finally {
                             setLoadingTemplate(false);
@@ -2910,7 +2930,7 @@
                                     email: "dl_verano@yahoo.com",
                                     signatoryName: "ENGR. DANTE L. VERANO",
                                     signatoryTitle: "General Manager",
-                                    logoUrl: "https://storage.googleapis.com/bard-files/uploaded:DLVESS_LOGO-removebg-preview.png-06d07e7a-8081-4933-9d15-f0d91ff24150", // Default logo
+                                    logoUrl: "", // Default logo to empty
                                 });
                             }
                         } catch (err) {
@@ -2922,7 +2942,7 @@
                                 email: "dl_verano@yahoo.com",
                                 signatoryName: "ENGR. DANTE L. VERANO",
                                 signatoryTitle: "General Manager",
-                                logoUrl: "https://storage.googleapis.com/bard-files/uploaded:DLVESS_LOGO-removebg-preview.png-06d07e7a-8081-4933-9d15-f0d91ff24150", // Default logo
+                                logoUrl: "", // Default logo to empty
                             });
                         } finally {
                             setLoadingTemplate(false);
