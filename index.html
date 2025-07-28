@@ -1459,7 +1459,7 @@
                                                 )}
                                             </tr>
                                         </thead>
-                                        <tbody className="bg-white divide-y divide-200">
+                                        <tbody className="bg-white divide-y divide-gray-200">
                                             {project.contractAdditions.map((additional, index) => (
                                                 <tr key={index}>
                                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{additional.date}</td>
@@ -1549,15 +1549,19 @@
                 const { showToast } = useContext(ToastContext); // Use ToastContext
 
                 useEffect(() => {
-                    if (!isAuthReady || !db || !userId) return;
+                    if (!isAuthReady || !db || !userId) {
+                        console.log("TemplateEditor useEffect: Firebase not ready or userId missing.");
+                        return;
+                    }
 
                     const templateDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/templates`, 'billingTemplate');
                     const fetchTemplate = async () => {
                         try {
+                            console.log("TemplateEditor: Attempting to fetch template from Firestore.");
                             const docSnap = await getDoc(templateDocRef);
                             if (docSnap.exists()) {
                                 const data = docSnap.data();
-                                // Merge fetched data with current state, ensuring defaults are applied if fields are missing in DB
+                                console.log("TemplateEditor: Fetched template data:", data);
                                 setTemplateData(prev => ({
                                     ...prev, // Keep existing state values not explicitly overwritten by data
                                     ...data, // Overwrite with fetched data
@@ -1572,10 +1576,10 @@
                                     defaultDescriptionOfWork: data.defaultDescriptionOfWork || 'General electrical works',
                                     logoUrl: data.logoUrl || '', // Ensure logoUrl defaults to empty if not present in DB
                                 }));
-                                console.log("Template data fetched from Firebase:", data);
-                                console.log("Fetched logoUrl from Firebase:", data.logoUrl);
+                                console.log("TemplateEditor: Fetched logoUrl from Firebase:", data.logoUrl);
                             } else {
                                 // Set default values if no template exists in Firebase
+                                console.log("TemplateEditor: No template found in Firebase, setting defaults.");
                                 setTemplateData({
                                     companyName: "D.L.Verano's Electrical Supply and Services",
                                     address: "72 BULELAK ST. MALANDAY, MARIKINA CITY",
@@ -1593,10 +1597,9 @@
                                     defaultBilledAmount: 100000,
                                     defaultDescriptionOfWork: 'General electrical works',
                                 });
-                                console.log("No template found in Firebase, setting defaults.");
                             }
                         } catch (err) {
-                            console.error("Error fetching template:", err);
+                            console.error("TemplateEditor: Error fetching template:", err);
                             setMessage({ type: 'error', text: 'Failed to load template.' });
                             showToast('Failed to load template.', 'error');
                         } finally {
@@ -1616,10 +1619,11 @@
                 const handleLogoUrlChange = (e) => {
                     const url = e.target.value;
                     setTemplateData(prev => ({ ...prev, logoUrl: url }));
+                    console.log("TemplateEditor: Logo URL changed to:", url);
                     if (url) {
-                        showToast('Logo URL updated!', 'success');
+                        showToast('Logo URL updated in form.', 'success');
                     } else {
-                        showToast('Logo URL cleared.', 'info');
+                        showToast('Logo URL cleared from form.', 'info');
                     }
                 };
 
@@ -1651,13 +1655,13 @@
                         delete dataToSave.defaultPartialPayments;
 
 
-                        console.log("Saving template data to Firebase:", dataToSave); // Add this log
-                        console.log("Attempting to save logoUrl:", dataToSave.logoUrl);
+                        console.log("TemplateEditor: Saving template data to Firebase:", dataToSave);
+                        console.log("TemplateEditor: Attempting to save logoUrl:", dataToSave.logoUrl);
                         await setDoc(templateDocRef, dataToSave, { merge: true });
                         setMessage({ type: 'success', text: 'Template saved successfully!' });
                         showToast('Template saved successfully!', 'success');
                     } catch (err) {
-                            console.error("Error saving template:", err);
+                            console.error("TemplateEditor: Error saving template:", err);
                             setMessage({ type: 'error', text: 'Failed to save template.' });
                             showToast('Failed to save template.', 'error');
                     }
