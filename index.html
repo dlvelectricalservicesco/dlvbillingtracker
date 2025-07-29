@@ -83,8 +83,8 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        // Import Firebase Storage modules
-        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
+        // Import Firebase Storage modules - NOT USED IN THIS VERSION FOR UPLOAD
+        // import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
 
         // Define Firebase config globally for the React script to access
@@ -121,11 +121,11 @@
             arrayUnion,
             arrayRemove,
             deleteDoc,
-            // Export Storage functions
-            getStorage,
-            ref,
-            uploadBytes,
-            getDownloadURL
+            // Storage functions are no longer directly exported for upload in this version
+            // getStorage,
+            // ref,
+            // uploadBytes,
+            // getDownloadURL
         };
     </script>
 
@@ -141,8 +141,10 @@
             const firebaseConfig = window.__firebase_config;
             const __app_id = window.__app_id;
             const __initial_auth_token = window.__initial_auth_token;
-            const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, getFirestore, collection, addDoc, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc, getStorage, ref, uploadBytes, getDownloadURL } = window.firebase;
-
+            const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, getFirestore, collection, addDoc, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc } = window.firebase;
+            // Removed Storage imports from here as well, since upload functionality is removed.
+            // If you later need getDownloadURL for displaying existing logos, you'd re-import it.
+            // For now, we assume logoUrl is directly stored in Firestore template.
 
             // Create a context for Firebase and user data
             const FirebaseContext = createContext(null);
@@ -1524,8 +1526,9 @@
                 );
             };
 
+            // Renamed from NewProjectForm to ProjectForm to handle both add and edit
             const TemplateEditor = ({ setView, setGeneratedReportData, isAdminLoggedIn }) => {
-                const { db, userId, isAuthReady, firebaseApp } = useFirebase(); // Destructure firebaseApp here
+                const { db, userId, isAuthReady } = useFirebase(); // firebaseApp is no longer needed here for upload
                 const [templateData, setTemplateData] = useState({
                     companyName: '',
                     address: '',
@@ -1545,7 +1548,7 @@
                 });
                 const [loading, setLoading] = useState(true);
                 const [message, setMessage] = useState({ type: '', text: '' });
-                const [isUploadingLogo, setIsUploadingLogo] = useState(false); // New state for logo upload loading
+                // const [isUploadingLogo, setIsUploadingLogo] = useState(false); // Removed state for logo upload loading
                 const { showToast } = useContext(ToastContext); // Use ToastContext
 
                 useEffect(() => {
@@ -1615,58 +1618,7 @@
                     setTemplateData(prev => ({ ...prev, [name]: value }));
                 };
 
-                // New function to handle logo file upload
-                const handleLogoUpload = async (e) => {
-                    const file = e.target.files[0];
-                    if (!file) return;
-
-                    if (!firebaseApp || !db || !userId) { // Check firebaseApp here
-                        showToast('Firebase not initialized. Cannot upload logo.', 'error');
-                        return;
-                    }
-
-                    setIsUploadingLogo(true);
-                    setMessage({ type: '', text: '' }); // Clear previous messages
-                    try {
-                        const storage = getStorage(firebaseApp); // Get storage instance using firebaseApp
-                        const storageRef = ref(storage, `artifacts/${__app_id}/users/${userId}/logos/${file.name}`);
-                        await uploadBytes(storageRef, file);
-                        const downloadURL = await getDownloadURL(storageRef);
-
-                        setTemplateData(prev => ({ ...prev, logoUrl: downloadURL }));
-                        showToast('Logo uploaded successfully!', 'success');
-                        setMessage({ type: 'success', text: 'Logo uploaded and updated in template!' });
-                        console.log("TemplateEditor: Logo uploaded and URL set to:", downloadURL);
-
-                        // Automatically save the template after successful logo upload
-                        // This ensures the logo URL is persisted immediately
-                        const templateDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/templates`, 'billingTemplate');
-                        const dataToSave = { ...templateData, logoUrl: downloadURL }; // Use the new URL
-                        delete dataToSave.defaultProjectName; // Remove preview fields before saving
-                        delete dataToSave.defaultLocation;
-                        delete dataToSave.defaultSubject;
-                        delete dataToSave.defaultPoNumber;
-                        delete dataToSave.defaultDate;
-                        delete dataToSave.defaultAttention;
-                        delete dataToSave.defaultBilledAmount;
-                        delete dataToSave.defaultDescriptionOfWork;
-                        delete dataToSave.headerElectricalSupply;
-                        delete dataToSave.headerSupplyDetails;
-                        delete dataToSave.defaultRetention;
-                        delete dataToSave.defaultRecoupment;
-                        delete dataToSave.defaultPartialPayments;
-
-                        await setDoc(templateDocRef, dataToSave, { merge: true });
-                        showToast('Template saved with new logo!', 'success');
-
-                    } catch (err) {
-                        console.error("TemplateEditor: Error uploading logo:", err);
-                        setMessage({ type: 'error', text: `Failed to upload logo: ${err.message}` });
-                        showToast(`Failed to upload logo: ${err.message}`, 'error');
-                    } finally {
-                        setIsUploadingLogo(false);
-                    }
-                };
+                // handleLogoUpload function removed
 
                 const handleSave = async () => {
                     if (!db || !userId) {
@@ -1689,6 +1641,7 @@
                         // The following fields were previously hardcoded in the template editor,
                         // but are not part of the core template data to be saved to Firebase.
                         // They are typically derived or specific to report generation.
+                        // Ensure these are removed from dataToSave.
                         delete dataToSave.headerElectricalSupply;
                         delete dataToSave.headerSupplyDetails;
                         delete dataToSave.defaultRetention;
@@ -1768,32 +1721,7 @@
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                             {/* Company Header Fields */}
-                            <div className="md:col-span-2">
-                                <label htmlFor="logoUpload" className="block text-sm font-medium text-gray-700 mb-1">Company Logo Upload</label>
-                                <input
-                                    type="file"
-                                    id="logoUpload"
-                                    name="logoUpload"
-                                    accept="image/*"
-                                    onChange={handleLogoUpload}
-                                    className="mt-1 block w-full text-sm text-gray-500
-                                    file:mr-4 file:py-2 file:px-4
-                                    file:rounded-full file:border-0
-                                    file:text-sm file:font-semibold
-                                    file:bg-blue-50 file:text-blue-700
-                                    hover:file:bg-blue-100"
-                                    disabled={isUploadingLogo}
-                                />
-                                {isUploadingLogo && <p className="mt-2 text-sm text-blue-600">Uploading logo... Please wait.</p>}
-                                <p className="text-xs text-gray-500 mt-1">
-                                    Upload your company logo image (e.g., PNG, JPG).
-                                </p>
-                                {templateData.logoUrl && (
-                                    <div className="mt-4 p-2 border border-gray-200 rounded-md bg-gray-50 flex items-center justify-center">
-                                        <img src={templateData.logoUrl} alt="Logo Preview" className="max-h-24 object-contain" onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/100x50/cccccc/ffffff?text=Image+Error'; }} />
-                                    </div>
-                                )}
-                            </div>
+                            {/* Removed Logo Upload Section */}
                             <div>
                                 <label htmlFor="companyName" className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
                                 <input type="text" id="companyName" name="companyName" value={templateData.companyName} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
@@ -2896,7 +2824,7 @@
                                     <h3 className="text-xl font-bold mb-4 text-gray-900">Select Expenses for {selectedProject.projectName}</h3>
                                     <div className="overflow-x-auto overflow-y-auto max-h-60 rounded-lg border border-gray-200 shadow-sm">
                                         <table className="min-w-full divide-y divide-gray-200">
-                                            <thead className="bg-gray-50 sticky top-0">
+                                            <thead className="bg-gray-100">
                                                 <tr>
                                                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Include</th>
                                                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
@@ -3147,15 +3075,17 @@
                             <span className="text-2xl font-extrabold text-red-700">₱{totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
 
-                        {/* Signature Area */}
+                        {/* Signature Area - Modified to hide elements */}
+                        {/*
                         <div className="text-right mt-16 flex flex-col items-end">
                             <p className="mb-10">Prepared by;</p>
                             <div className="border-b border-gray-700 w-72 mb-2"></div>
                             <p className="font-semibold text-xl">{template?.signatoryName}</p>
                             <p className="text-base text-gray-700">{template?.signatoryTitle}</p>
                         </div>
+                        */}
 
-                        {/* Back and Print Buttons */}
+                        {/* Control Buttons */}
                         <div className="mt-12 text-center print:hidden">
                             <button
                                 onClick={() => setView('createExpenseReport')}
@@ -3260,9 +3190,6 @@
                     setReportToDelete(null);
                 };
 
-                if (loading) return <div className="text-center py-8">Loading logs...</div>;
-                if (error) return <div className="text-center py-8 text-red-600">{error}</div>;
-
                 if (!isAdminLoggedIn) {
                     return (
                         <div className="bg-white p-6 rounded-lg shadow-md max-w-2xl mx-auto text-center py-10">
@@ -3271,6 +3198,10 @@
                         </div>
                     );
                 }
+
+                if (loading) return <div className="text-center py-8">Loading logs...</div>;
+                if (error) return <div className="text-center py-8 text-red-600">{error}</div>;
+
 
                 return (
                     <div className="bg-white p-6 rounded-lg shadow-md">
