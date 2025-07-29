@@ -1525,7 +1525,7 @@
             };
 
             const TemplateEditor = ({ setView, setGeneratedReportData, isAdminLoggedIn }) => {
-                const { db, userId, isAuthReady } = useFirebase();
+                const { db, userId, isAuthReady, firebaseApp } = useFirebase(); // Destructure firebaseApp here
                 const [templateData, setTemplateData] = useState({
                     companyName: '',
                     address: '',
@@ -1620,7 +1620,7 @@
                     const file = e.target.files[0];
                     if (!file) return;
 
-                    if (!db || !userId) {
+                    if (!firebaseApp || !db || !userId) { // Check firebaseApp here
                         showToast('Firebase not initialized. Cannot upload logo.', 'error');
                         return;
                     }
@@ -1628,7 +1628,7 @@
                     setIsUploadingLogo(true);
                     setMessage({ type: '', text: '' }); // Clear previous messages
                     try {
-                        const storage = getStorage(firebaseApp); // Get storage instance
+                        const storage = getStorage(firebaseApp); // Get storage instance using firebaseApp
                         const storageRef = ref(storage, `artifacts/${__app_id}/users/${userId}/logos/${file.name}`);
                         await uploadBytes(storageRef, file);
                         const downloadURL = await getDownloadURL(storageRef);
