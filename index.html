@@ -83,7 +83,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        // Import Firebase Storage modules (though not directly used for URL paste, still needed for other potential storage interactions)
+        // Import Firebase Storage modules
         import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
 
@@ -121,7 +121,7 @@
             arrayUnion,
             arrayRemove,
             deleteDoc,
-            // Export Storage functions (keeping them for completeness, even if uploadBytes isn't used for logo paste)
+            // Export Storage functions
             getStorage,
             ref,
             uploadBytes,
@@ -138,7 +138,6 @@
             const ReactDOM = window.ReactDOM; // Explicitly get ReactDOM from the window object
 
             // Access Firebase functions and config from the global window object
-            // Correctly access __firebase_config from window
             const firebaseConfig = window.__firebase_config;
             const __app_id = window.__app_id;
             const __initial_auth_token = window.__initial_auth_token;
@@ -1546,6 +1545,7 @@
                 });
                 const [loading, setLoading] = useState(true);
                 const [message, setMessage] = useState({ type: '', text: '' });
+                const [isUploadingLogo, setIsUploadingLogo] = useState(false); // New state for logo upload loading
                 const { showToast } = useContext(ToastContext); // Use ToastContext
 
                 useEffect(() => {
@@ -1615,15 +1615,56 @@
                     setTemplateData(prev => ({ ...prev, [name]: value }));
                 };
 
-                // Updated function to handle URL paste instead of file upload
-                const handleLogoUrlChange = (e) => {
-                    const url = e.target.value;
-                    setTemplateData(prev => ({ ...prev, logoUrl: url }));
-                    console.log("TemplateEditor: Logo URL changed to:", url);
-                    if (url) {
-                        showToast('Logo URL updated in form.', 'success');
-                    } else {
-                        showToast('Logo URL cleared from form.', 'info');
+                // New function to handle logo file upload
+                const handleLogoUpload = async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+
+                    if (!db || !userId) {
+                        showToast('Firebase not initialized. Cannot upload logo.', 'error');
+                        return;
+                    }
+
+                    setIsUploadingLogo(true);
+                    setMessage({ type: '', text: '' }); // Clear previous messages
+                    try {
+                        const storage = getStorage(firebaseApp); // Get storage instance
+                        const storageRef = ref(storage, `artifacts/${__app_id}/users/${userId}/logos/${file.name}`);
+                        await uploadBytes(storageRef, file);
+                        const downloadURL = await getDownloadURL(storageRef);
+
+                        setTemplateData(prev => ({ ...prev, logoUrl: downloadURL }));
+                        showToast('Logo uploaded successfully!', 'success');
+                        setMessage({ type: 'success', text: 'Logo uploaded and updated in template!' });
+                        console.log("TemplateEditor: Logo uploaded and URL set to:", downloadURL);
+
+                        // Automatically save the template after successful logo upload
+                        // This ensures the logo URL is persisted immediately
+                        const templateDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/templates`, 'billingTemplate');
+                        const dataToSave = { ...templateData, logoUrl: downloadURL }; // Use the new URL
+                        delete dataToSave.defaultProjectName; // Remove preview fields before saving
+                        delete dataToSave.defaultLocation;
+                        delete dataToSave.defaultSubject;
+                        delete dataToSave.defaultPoNumber;
+                        delete dataToSave.defaultDate;
+                        delete dataToSave.defaultAttention;
+                        delete dataToSave.defaultBilledAmount;
+                        delete dataToSave.defaultDescriptionOfWork;
+                        delete dataToSave.headerElectricalSupply;
+                        delete dataToSave.headerSupplyDetails;
+                        delete dataToSave.defaultRetention;
+                        delete dataToSave.defaultRecoupment;
+                        delete dataToSave.defaultPartialPayments;
+
+                        await setDoc(templateDocRef, dataToSave, { merge: true });
+                        showToast('Template saved with new logo!', 'success');
+
+                    } catch (err) {
+                        console.error("TemplateEditor: Error uploading logo:", err);
+                        setMessage({ type: 'error', text: `Failed to upload logo: ${err.message}` });
+                        showToast(`Failed to upload logo: ${err.message}`, 'error');
+                    } finally {
+                        setIsUploadingLogo(false);
                     }
                 };
 
@@ -1728,21 +1769,27 @@
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                             {/* Company Header Fields */}
                             <div className="md:col-span-2">
-                                <label htmlFor="logoUrl" className="block text-sm font-medium text-gray-700 mb-1">Company Logo URL</label>
+                                <label htmlFor="logoUpload" className="block text-sm font-medium text-gray-700 mb-1">Company Logo Upload</label>
                                 <input
-                                    type="text"
-                                    id="logoUrl"
-                                    name="logoUrl"
-                                    value={templateData.logoUrl}
-                                    onChange={handleLogoUrlChange}
-                                    placeholder="Paste image URL here (e.g., https://example.com/logo.png)"
-                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                                    type="file"
+                                    id="logoUpload"
+                                    name="logoUpload"
+                                    accept="image/*"
+                                    onChange={handleLogoUpload}
+                                    className="mt-1 block w-full text-sm text-gray-500
+                                    file:mr-4 file:py-2 file:px-4
+                                    file:rounded-full file:border-0
+                                    file:text-sm file:font-semibold
+                                    file:bg-blue-50 file:text-blue-700
+                                    hover:file:bg-blue-100"
+                                    disabled={isUploadingLogo}
                                 />
+                                {isUploadingLogo && <p className="mt-2 text-sm text-blue-600">Uploading logo... Please wait.</p>}
                                 <p className="text-xs text-gray-500 mt-1">
-                                    Enter the direct URL to your company logo image.
+                                    Upload your company logo image (e.g., PNG, JPG).
                                 </p>
                                 {templateData.logoUrl && (
-                                    <div className="mt-2 p-2 border border-gray-200 rounded-md bg-gray-50 flex items-center justify-center">
+                                    <div className="mt-4 p-2 border border-gray-200 rounded-md bg-gray-50 flex items-center justify-center">
                                         <img src={templateData.logoUrl} alt="Logo Preview" className="max-h-24 object-contain" onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/100x50/cccccc/ffffff?text=Image+Error'; }} />
                                     </div>
                                 )}
@@ -3382,7 +3429,7 @@
                 }
 
                 return (
-                    <FirebaseContext.Provider value={{ db, auth, userId, isAuthReady }}>
+                    <FirebaseContext.Provider value={{ db, auth, userId, isAuthReady, firebaseApp }}>
                         <ToastProvider> {/* Wrap the entire app with ToastProvider */}
                             <div className="min-h-screen bg-gray-100 font-sans antialiased text-gray-800">
                                 <Header setView={setView} isAdminLoggedIn={isAdminLoggedIn} onAdminLogout={handleAdminLogout} onAdminLoginClick={() => setShowAdminLoginModal(true)} />
