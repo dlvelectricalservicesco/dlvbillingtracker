@@ -81,11 +81,9 @@
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        // Updated Firebase Auth imports for email/password and signOut
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        // Import Firebase Storage modules - NOT USED IN THIS VERSION FOR UPLOAD
-        // import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
-
 
         // Define Firebase config globally for the React script to access
         // API Key is intentionally left empty; Canvas will inject it at runtime.
@@ -101,14 +99,15 @@
 
         // Define __app_id and __initial_auth_token globally
         window.__app_id = 'dlvbillingtracker'; // Use your actual app ID
-        window.__initial_auth_token = null; // Set to null or your actual token if available
+        window.__initial_auth_token = null; // No longer used for primary auth, but kept for Canvas environment compatibility
 
         // Export Firebase functions to the window object so React script can use them
         window.firebase = {
             initializeApp,
             getAuth,
-            signInAnonymously,
-            signInWithCustomToken,
+            signInWithEmailAndPassword, // Added
+            createUserWithEmailAndPassword, // Added
+            signOut, // Added
             onAuthStateChanged,
             getFirestore,
             collection,
@@ -121,11 +120,6 @@
             arrayUnion,
             arrayRemove,
             deleteDoc,
-            // Storage functions are no longer directly exported for upload in this version
-            // getStorage,
-            // ref,
-            // uploadBytes,
-            // getDownloadURL
         };
     </script>
 
@@ -140,11 +134,9 @@
             // Access Firebase functions and config from the global window object
             const firebaseConfig = window.__firebase_config;
             const __app_id = window.__app_id;
-            const __initial_auth_token = window.__initial_auth_token;
-            const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, getFirestore, collection, addDoc, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc } = window.firebase;
-            // Removed Storage imports from here as well, since upload functionality is removed.
-            // If you later need getDownloadURL for displaying existing logos, you'd re-import it.
-            // For now, we assume logoUrl is directly stored in Firestore template.
+            // __initial_auth_token is no longer used for primary authentication, but retained for context
+            // const __initial_auth_token = window.__initial_auth_token;
+            const { initializeApp, getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, getFirestore, collection, addDoc, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc } = window.firebase;
 
             // Create a context for Firebase and user data
             const FirebaseContext = createContext(null);
@@ -229,12 +221,14 @@
                                 </div>
                                 <div className="flex justify-end space-x-3">
                                     <button
+                                        type="button" // Added type="button" to prevent form submission
                                         onClick={onClose}
                                         className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50"
                                     >
                                         Cancel
                                     </button>
                                     <button
+                                        type="button" // Added type="button" to prevent form submission
                                         onClick={handleLogin}
                                         className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
                                     >
@@ -247,20 +241,170 @@
                 );
             };
 
+            // --- AuthForm Component for Email/Password Login/Register ---
+            const AuthForm = ({ onLoginSuccess, onRegisterSuccess, onToggleView, isLoginView }) => {
+                const { auth } = useFirebase();
+                const [email, setEmail] = useState('');
+                const [password, setPassword] = useState('');
+                const [confirmPassword, setConfirmPassword] = useState('');
+                const [error, setError] = useState('');
+                const [loading, setLoading] = useState(false);
+                const { showToast } = useContext(ToastContext);
+
+                const handleSubmit = async (e) => {
+                    e.preventDefault();
+                    setError('');
+                    setLoading(true);
+
+                    try {
+                        if (isLoginView) {
+                            // Login
+                            await signInWithEmailAndPassword(auth, email, password);
+                            showToast('Logged in successfully!', 'success');
+                            onLoginSuccess();
+                        } else {
+                            // Register
+                            if (password !== confirmPassword) {
+                                setError('Passwords do not match.');
+                                showToast('Passwords do not match.', 'error');
+                                setLoading(false);
+                                return;
+                            }
+                            await createUserWithEmailAndPassword(auth, email, password);
+                            showToast('Account created and logged in successfully!', 'success');
+                            onRegisterSuccess();
+                        }
+                    } catch (err) {
+                        console.error("Authentication error:", err);
+                        let errorMessage = 'An unexpected error occurred.';
+                        if (err.code) {
+                            switch (err.code) {
+                                case 'auth/invalid-email':
+                                    errorMessage = 'Invalid email address format.';
+                                    break;
+                                case 'auth/user-disabled':
+                                    errorMessage = 'This user account has been disabled.';
+                                    break;
+                                case 'auth/user-not-found':
+                                case 'auth/wrong-password':
+                                    errorMessage = 'Invalid email or password.';
+                                    break;
+                                case 'auth/email-already-in-use':
+                                    errorMessage = 'This email is already registered. Try logging in.';
+                                    break;
+                                case 'auth/weak-password':
+                                    errorMessage = 'Password should be at least 6 characters.';
+                                    break;
+                                case 'auth/operation-not-allowed':
+                                    errorMessage = 'Email/password authentication is not enabled. Please contact support.';
+                                    break;
+                                default:
+                                    errorMessage = `Authentication failed: ${err.message}`;
+                            }
+                        }
+                        setError(errorMessage);
+                        showToast(errorMessage, 'error');
+                    } finally {
+                        setLoading(false);
+                    }
+                };
+
+                return (
+                    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50">
+                        <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm transform transition-all scale-100 opacity-100">
+                            <h3 className="text-xl font-bold mb-4 text-gray-900 border-b pb-2">
+                                {isLoginView ? 'Login' : 'Register'}
+                            </h3>
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <div>
+                                    <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                                    <input
+                                        type="email"
+                                        id="email"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                                    <input
+                                        type="password"
+                                        id="password"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                                        required
+                                    />
+                                </div>
+                                {!isLoginView && (
+                                    <div>
+                                        <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+                                        <input
+                                            type="password"
+                                            id="confirmPassword"
+                                            value={confirmPassword}
+                                            onChange={(e) => setConfirmPassword(e.target.value)}
+                                            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                                            required
+                                        />
+                                    </div>
+                                )}
+                                {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+                                <div className="flex justify-end space-x-3 mt-6">
+                                    <button
+                                        type="submit"
+                                        className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        disabled={loading}
+                                    >
+                                        {loading ? 'Processing...' : (isLoginView ? 'Login' : 'Register')}
+                                    </button>
+                                </div>
+                            </form>
+                            <div className="mt-4 text-center">
+                                <button
+                                    type="button"
+                                    onClick={onToggleView}
+                                    className="text-blue-600 hover:underline text-sm"
+                                >
+                                    {isLoginView ? 'Need an account? Register' : 'Already have an account? Login'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
 
             // --- Component Definitions (Ordered from child to parent where possible) ---
 
-            const Header = ({ setView, isAdminLoggedIn, onAdminLogout, onAdminLoginClick, userId }) => {
+            const Header = ({ setView, isAdminLoggedIn, onAdminLogout, onAdminLoginClick, currentUserEmail, userId }) => {
                 return (
                     <header className="bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-lg rounded-b-lg print:hidden">
                         <div className="container mx-auto p-4 flex flex-col sm:flex-row justify-between items-center">
                             <h1 className="text-3xl font-bold mb-4 sm:mb-0">DLV Electrical Services Co.</h1>
-                            {userId && ( // Display userId if available
+                            {currentUserEmail ? ( // Display user email if logged in with email/password
+                                <div className="text-sm opacity-75 mt-2 sm:mt-0">
+                                    Logged in as: <span className="font-mono break-all">{currentUserEmail}</span>
+                                </div>
+                            ) : userId && ( // Fallback to userId if no email (e.g., anonymous, though we're removing it)
                                 <div className="text-sm opacity-75 mt-2 sm:mt-0">
                                     User ID: <span className="font-mono break-all">{userId}</span>
                                 </div>
                             )}
-                            {!isAdminLoggedIn && (
+
+                            {/* Admin Login/Logout buttons */}
+                            {isAdminLoggedIn ? (
+                                <div className="mt-2 sm:mt-0">
+                                    <button
+                                        onClick={onAdminLogout}
+                                        className="px-4 py-2 rounded-lg bg-gray-500 text-white hover:bg-gray-600 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 text-sm sm:text-base font-medium"
+                                    >
+                                        Admin Logout
+                                    </button>
+                                </div>
+                            ) : (
                                 <div className="mt-2 sm:mt-0">
                                     <button
                                         onClick={onAdminLoginClick}
@@ -313,11 +457,12 @@
                                         >
                                             Logs
                                         </button>
+                                        {/* General Logout button for authenticated users */}
                                         <button
-                                            onClick={onAdminLogout}
-                                            className="px-4 py-2 rounded-lg bg-gray-500 text-white hover:bg-gray-600 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 text-sm sm:text-base font-medium"
+                                            onClick={onAdminLogout} {/* This will now also sign out the Firebase user */}
+                                            className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 text-sm sm:text-base font-medium"
                                         >
-                                            Admin Logout
+                                            Logout
                                         </button>
                                     </>
                                 )}
@@ -345,12 +490,14 @@
                             <p className="text-gray-700 mb-6">{message}</p>
                             <div className="flex justify-end space-x-3">
                                 <button
+                                    type="button"
                                     onClick={onCancel}
                                     className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50"
                                 >
                                     Cancel
                                 </button>
                                 <button
+                                    type="button"
                                     onClick={onConfirm}
                                     className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50"
                                 >
@@ -2723,7 +2870,7 @@
                                     type="button"
                                     onClick={handleGenerateReport}
                                     className="px-5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-                                    disabled={!selectedProject || selectedExpenses.length === 0}
+                                    disabled={!selectedProject || selectedPartialPayments.length === 0} {/* Changed from selectedExpenses to selectedPartialPayments */}
                                 >
                                     Generate Billing Report
                                 </button>
@@ -3299,18 +3446,19 @@
                 const [db, setDb] = useState(null);
                 const [auth, setAuth] = useState(null);
                 const [userId, setUserId] = useState(null);
+                const [currentUserEmail, setCurrentUserEmail] = useState(null); // New state for user email
                 const [isAuthReady, setIsAuthReady] = useState(false);
                 const [loading, setLoading] = useState(true);
                 const [error, setError] = useState(null);
                 const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false); // New state for admin access
                 const [showAdminLoginModal, setShowAdminLoginModal] = useState(false); // New state for admin login modal
+                const [isLoginView, setIsLoginView] = useState(true); // State for AuthForm to toggle login/register
 
                 useEffect(() => {
                     const initializeFirebase = async () => {
                         try {
                             const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-app-id'; // Access from window
                             const firebaseConfig = typeof window.__firebase_config !== 'undefined' ? window.__firebase_config : {}; // Access from window
-                            const initialAuthToken = typeof window.__initial_auth_token !== 'undefined' ? window.__initial_auth_token : null; // Access from window
 
                             if (Object.keys(firebaseConfig).length === 0) {
                                 throw new Error("Firebase configuration is missing. Please ensure __firebase_config is set.");
@@ -3324,20 +3472,22 @@
                             setDb(firestore);
                             setAuth(authentication);
 
-                            const unsubscribe = onAuthStateChanged(authentication, async (user) => {
+                            // Listen for authentication state changes
+                            const unsubscribe = onAuthStateChanged(authentication, (user) => {
                                 if (user) {
                                     setUserId(user.uid);
-                                } else {
-                                    try {
-                                        if (initialAuthToken) {
-                                            await signInWithCustomToken(authentication, initialAuthToken);
-                                        } else {
-                                            await signInAnonymously(authentication);
-                                        }
-                                    } catch (authError) {
-                                        console.error("Firebase Auth error during sign-in:", authError);
-                                        setError(`Authentication failed: ${authError.message}`);
+                                    setCurrentUserEmail(user.email); // Set email if available
+                                    // Automatically grant admin if the user is a specific admin email (example)
+                                    // For a real app, you'd check a Firestore role or similar
+                                    if (user.email === 'admin@example.com') { // Replace with your actual admin email
+                                        setIsAdminLoggedIn(true);
+                                    } else {
+                                        setIsAdminLoggedIn(false);
                                     }
+                                } else {
+                                    setUserId(null);
+                                    setCurrentUserEmail(null);
+                                    setIsAdminLoggedIn(false); // Ensure admin status is reset on logout
                                 }
                                 setIsAuthReady(true);
                                 setLoading(false);
@@ -3354,14 +3504,36 @@
                     initializeFirebase();
                 }, []);
 
+                const handleUserLoginSuccess = () => {
+                    // This function is called when a user successfully logs in via AuthForm
+                    // onAuthStateChanged will handle setting userId and currentUserEmail
+                    // No need to set userId/email here directly, as onAuthStateChanged listener will fire.
+                    setView('dashboard'); // Redirect to dashboard after successful login
+                };
+
+                const handleUserRegisterSuccess = () => {
+                    // This function is called when a user successfully registers via AuthForm
+                    // onAuthStateChanged will handle setting userId and currentUserEmail
+                    setView('dashboard'); // Redirect to dashboard after successful registration
+                };
+
                 const handleAdminLoginSuccess = () => {
+                    // This is for the *separate* admin password modal, not Firebase user login
                     setIsAdminLoggedIn(true);
                     setShowAdminLoginModal(false);
                 };
 
-                const handleAdminLogout = () => {
-                    setIsAdminLoggedIn(false);
-                    setView('dashboard'); // Redirect to dashboard on logout
+                const handleLogout = async () => {
+                    if (auth) {
+                        try {
+                            await signOut(auth);
+                            // State will be updated by onAuthStateChanged listener
+                            setView('dashboard'); // Redirect to dashboard on logout
+                        } catch (err) {
+                            console.error("Error signing out:", err);
+                            // Optionally show a toast for logout error
+                        }
+                    }
                 };
 
                 if (loading) {
@@ -3387,18 +3559,35 @@
                     );
                 }
 
+                // If not authenticated, show the AuthForm
+                if (!userId) {
+                    return (
+                        <FirebaseContext.Provider value={{ db, auth, userId, isAuthReady, firebaseApp }}>
+                            <ToastProvider>
+                                <AuthForm
+                                    onLoginSuccess={handleUserLoginSuccess}
+                                    onRegisterSuccess={handleUserRegisterSuccess}
+                                    onToggleView={() => setIsLoginView(prev => !prev)}
+                                    isLoginView={isLoginView}
+                                />
+                            </ToastProvider>
+                        </FirebaseContext.Provider>
+                    );
+                }
+
                 return (
                     <FirebaseContext.Provider value={{ db, auth, userId, isAuthReady, firebaseApp }}>
                         <ToastProvider> {/* Wrap the entire app with ToastProvider */}
                             <div className="min-h-screen bg-gray-100 font-sans antialiased text-gray-800">
-                                <Header setView={setView} isAdminLoggedIn={isAdminLoggedIn} onAdminLogout={handleAdminLogout} onAdminLoginClick={() => setShowAdminLoginModal(true)} userId={userId} />
-                                {isAuthReady && !window.__initial_auth_token && (
-                                    <div className="container mx-auto mt-4 p-3 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-lg shadow-sm print:hidden">
-                                        <p className="font-semibold">Data Sync Notice:</p>
-                                        <p className="text-sm">You are currently signed in anonymously. Data entered will only be accessible from this specific browser session. For cross-device data synchronization, please ensure the application is run in an environment that provides a persistent authentication token (e.g., within the Canvas environment).</p>
-                                        <p className="text-xs mt-2">Your current anonymous User ID is: <span className="font-mono font-bold">{userId}</span></p>
-                                    </div>
-                                )}
+                                <Header
+                                    setView={setView}
+                                    isAdminLoggedIn={isAdminLoggedIn}
+                                    onAdminLogout={handleLogout} // Now logs out Firebase user
+                                    onAdminLoginClick={() => setShowAdminLoginModal(true)}
+                                    userId={userId}
+                                    currentUserEmail={currentUserEmail} // Pass email to header
+                                />
+                                {/* Removed anonymous user notice */}
                                 <main className="container mx-auto p-4 sm:p-6 lg:p-8">
                                     {view === 'dashboard' && <Dashboard setView={setView} setSelectedProjectId={setSelectedProjectId} isAdminLoggedIn={isAdminLoggedIn} />}
                                     {view === 'projects' && <Projects setView={setView} setSelectedProjectId={setSelectedProjectId} isAdminLoggedIn={isAdminLoggedIn} />}
