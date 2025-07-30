@@ -73,6 +73,7 @@
     <div id="root"></div>
 
     <!-- React and ReactDOM CDNs -->
+    <!-- Switched to cdnjs for better CORS compatibility -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js" crossorigin></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -80,11 +81,13 @@
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        
+
+
         // Define Firebase config globally for the React script to access
-        window.__firebase_config = {
+        // API Key is intentionally left empty; Canvas will inject it at runtime.
+        window.__firebase_config = { // Changed to window.__firebase_config
             apiKey: "AIzaSyD7LhkerFn3EAMRDIE0Da-ko2Cw7lKg6OQ",
             authDomain: "dlvbilling-448fc.firebaseapp.com",
             projectId: "dlvbilling-448fc",
@@ -95,8 +98,8 @@
         };
 
         // Define __app_id and __initial_auth_token globally
-        window.__app_id = 'dlvbillingtracker';
-        window.__initial_auth_token = null;
+        window.__app_id = 'dlvbillingtracker'; // Use your actual app ID
+        window.__initial_auth_token = null; // Set to null or your actual token if available
 
         // Export Firebase functions to the window object so React script can use them
         window.firebase = {
@@ -105,6 +108,7 @@
             signInAnonymously,
             signInWithCustomToken,
             onAuthStateChanged,
+            signOut, // Ensure signOut is exported
             getFirestore,
             collection,
             addDoc,
@@ -120,15 +124,18 @@
     </script>
 
     <script type="text/babel">
+        // Ensure the entire React application runs only after the window is fully loaded.
+        // This helps guarantee that ReactDOM is defined by the time it's accessed.
         window.onload = function() {
+            // React and ReactDOM are now guaranteed to be available here
             const { useState, useEffect, createContext, useContext } = React;
-            const ReactDOM = window.ReactDOM;
+            const ReactDOM = window.ReactDOM; // Explicitly get ReactDOM from the window object
 
             // Access Firebase functions and config from the global window object
             const firebaseConfig = window.__firebase_config;
             const __app_id = window.__app_id;
             const __initial_auth_token = window.__initial_auth_token;
-            const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, getFirestore, collection, addDoc, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc } = window.firebase;
+            const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut, getFirestore, collection, addDoc, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc } = window.firebase;
 
             // Create a context for Firebase and user data
             const FirebaseContext = createContext(null);
@@ -174,18 +181,19 @@
                 );
             };
 
-            // --- Admin Login Modal Component (Re-introduced for initial admin promotion) ---
+            // --- AdminLoginModal Component ---
             const AdminLoginModal = ({ onClose, onLoginSuccess }) => {
                 const [password, setPassword] = useState('');
                 const [error, setError] = useState('');
                 const { showToast } = useContext(ToastContext);
 
-                const handleLogin = () => {
-                    // This password is a one-time mechanism to grant the first admin role.
+                const handleLogin = (e) => {
+                    e.preventDefault();
+                    setError(''); // Clear previous errors
+                    // Simple hardcoded admin check for demonstration purposes
                     if (password === 'admin123') {
-                        onLoginSuccess(); // This will now trigger a Firestore update
-                        showToast('Admin access granted!', 'success');
-                        onClose();
+                        onLoginSuccess();
+                        showToast('Admin login successful!', 'success');
                     } else {
                         setError('Invalid password. Please try again.');
                         showToast('Invalid password.', 'error');
@@ -195,52 +203,56 @@
                 return (
                     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50">
                         <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm transform transition-all scale-100 opacity-100">
-                            <h3 className="text-xl font-bold mb-4 text-gray-900 border-b pb-2">Admin Promotion</h3>
-                            <p className="text-sm text-gray-600 mb-4">Enter the password to elevate your account to an Admin role. This is a one-time action.</p>
-                            <div className="space-y-4">
+                            <h3 className="text-xl font-bold mb-4 text-gray-900 border-b pb-2">Admin Login</h3>
+                            <form onSubmit={handleLogin} className="space-y-4">
                                 <div>
                                     <label htmlFor="adminPassword" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
                                     <input
                                         type="password"
                                         id="adminPassword"
                                         value={password}
-                                        onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                                        onChange={(e) => setPassword(e.target.value)}
                                         className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                                        onKeyPress={(e) => { if (e.key === 'Enter') handleLogin(); }}
+                                        required
                                     />
-                                    {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
                                 </div>
-                                <div className="flex justify-end space-x-3">
+                                {error && <p className="text-red-600 text-sm">{error}</p>}
+                                <div className="flex justify-end space-x-3 mt-6">
                                     <button
+                                        type="button"
                                         onClick={onClose}
                                         className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50"
                                     >
                                         Cancel
                                     </button>
                                     <button
-                                        onClick={handleLogin}
+                                        type="submit"
                                         className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
                                     >
-                                        Become Admin
+                                        Login
                                     </button>
                                 </div>
-                            </div>
+                            </form>
                         </div>
                     </div>
                 );
             };
 
+            // --- Component Definitions (Ordered from child to parent where possible) ---
 
-            // --- Component Definitions ---
-
-            const Header = ({ setView, isAdminLoggedIn, onAdminLogout, onAdminLoginClick, userId }) => {
+            const Header = ({ setView, isAdminLoggedIn, onAdminLogout, onAdminLoginClick }) => {
                 return (
                     <header className="bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-lg rounded-b-lg print:hidden">
                         <div className="container mx-auto p-4 flex flex-col sm:flex-row justify-between items-center">
                             <h1 className="text-3xl font-bold mb-4 sm:mb-0">DLV Electrical Services Co.</h1>
-                            {userId && (
-                                <div className="text-sm opacity-75 mt-2 sm:mt-0">
-                                    User ID: <span className="font-mono break-all">{userId}</span>
+                            {!isAdminLoggedIn && (
+                                <div className="mt-2 sm:mt-0">
+                                    <button
+                                        onClick={onAdminLoginClick}
+                                        className="px-4 py-2 rounded-lg bg-gray-700 text-white hover:bg-gray-800 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-gray-600 focus:ring-opacity-50 text-sm sm:text-base font-medium"
+                                    >
+                                        Admin Login
+                                    </button>
                                 </div>
                             )}
                         </div>
@@ -286,27 +298,12 @@
                                             Logs
                                         </button>
                                         <button
-                                            onClick={() => setView('userManagement')}
-                                            className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 text-sm sm:text-base font-medium"
+                                            onClick={onAdminLogout}
+                                            className="px-4 py-2 rounded-lg bg-gray-500 text-white hover:bg-gray-600 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 text-sm sm:text-base font-medium"
                                         >
-                                            Admin & Users
+                                            Admin Logout
                                         </button>
                                     </>
-                                )}
-                                 {!isAdminLoggedIn ? (
-                                    <button
-                                        onClick={onAdminLoginClick}
-                                        className="px-4 py-2 rounded-lg bg-gray-700 text-white hover:bg-gray-800 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-gray-600 focus:ring-opacity-50 text-sm sm:text-base font-medium"
-                                    >
-                                        Become Admin
-                                    </button>
-                                ) : (
-                                     <button
-                                        onClick={onAdminLogout}
-                                        className="px-4 py-2 rounded-lg bg-gray-500 text-white hover:bg-gray-600 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 text-sm sm:text-base font-medium"
-                                    >
-                                        Logout Admin
-                                    </button>
                                 )}
                             </div>
                         </nav>
@@ -352,23 +349,25 @@
             const AddRecordModal = ({ title, onClose, onSave, type }) => {
                 const [amount, setAmount] = useState('');
                 const [description, setDescription] = useState('');
-                const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-                const [modeOfPayment, setModeOfPayment] = useState('Cash');
-                const [paymentType, setPaymentType] = useState('Payment');
+                const [date, setDate] = useState(new Date().toISOString().slice(0, 10)); // Default to today
+                const [modeOfPayment, setModeOfPayment] = useState('Cash'); // Default mode of payment for payments
+                const [paymentType, setPaymentType] = useState('Payment'); // New: Default payment type
                 const [bankName, setBankName] = useState('');
                 const [checkNo, setCheckNo] = useState('');
                 const [transactionNo, setTransactionNo] = useState('');
-                const [expenseType, setExpenseType] = useState('Material Expenses');
-                const [deliveryRecipientNo, setDeliveryRecipientNo] = useState('');
+                const [expenseType, setExpenseType] = useState('Material Expenses'); // New: Default expense type
+                const [deliveryRecipientNo, setDeliveryRecipientNo] = useState(''); // New state for expenses
                 const [errors, setErrors] = useState({});
-                const { showToast } = useContext(ToastContext);
+                const { showToast } = useContext(ToastContext); // Use ToastContext
 
                 const validateForm = () => {
                     const newErrors = {};
                     if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
                         newErrors.amount = `${type === 'payment' || type === 'additional' ? 'Amount' : 'Expense'} must be a positive number.`;
                     }
-                    if (!date) newErrors.date = 'Date is required.';
+                    if (!date) {
+                        newErrors.date = 'Date is required.';
+                    }
                     if (type === 'payment') {
                         if (modeOfPayment === 'Check') {
                             if (!bankName.trim()) newErrors.bankName = 'Bank Name is required for Check payments.';
@@ -398,7 +397,7 @@
 
                         if (type === 'payment') {
                             recordData.modeOfPayment = modeOfPayment;
-                            recordData.paymentType = paymentType;
+                            recordData.paymentType = paymentType; // Include payment type
                             if (modeOfPayment === 'Check') {
                                 recordData.bankName = bankName.trim();
                                 recordData.checkNo = checkNo.trim();
@@ -407,7 +406,7 @@
                                 recordData.transactionNo = transactionNo.trim();
                             }
                         } else if (type === 'expense') {
-                            recordData.expenseType = expenseType;
+                            recordData.expenseType = expenseType; // Include expense type
                             recordData.deliveryRecipientNo = deliveryRecipientNo.trim();
                         }
                         onSave(recordData);
@@ -598,14 +597,18 @@
                 const [projects, setProjects] = useState([]);
                 const [loading, setLoading] = useState(true);
                 const [error, setError] = useState(null);
-                const { showToast } = useContext(ToastContext);
+                const { showToast } = useContext(ToastContext); // Use ToastContext
 
                 useEffect(() => {
-                    if (!isAuthReady || !db || !userId) return;
+                    if (!isAuthReady || !db) return; // userId is not needed for public data path
 
-                    const projectsColRef = collection(db, `artifacts/${__app_id}/users/${userId}/projects`);
+                    // Changed to public data path
+                    const projectsColRef = collection(db, `artifacts/${__app_id}/public/data/projects`);
                     const unsubscribe = onSnapshot(projectsColRef, (snapshot) => {
-                        const projectsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        const projectsData = snapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data()
+                        }));
                         setProjects(projectsData);
                         setLoading(false);
                     }, (err) => {
@@ -616,7 +619,7 @@
                     });
 
                     return () => unsubscribe();
-                }, [db, userId, isAuthReady, showToast]);
+                }, [db, isAuthReady, showToast]); // Removed userId from dependency array
 
                 if (loading) return <div className="text-center py-8">Loading dashboard...</div>;
                 if (error) return <div className="text-center py-8 text-red-600">{error}</div>;
@@ -627,25 +630,28 @@
                     return totalPaid >= p.contractAmount;
                 }).length;
                 const inProgressProjects = totalProjects - completedProjects;
+
                 const totalContractAmount = projects.reduce((sum, p) => sum + (p.contractAmount || 0), 0);
 
                 return (
                     <div className="bg-white p-6 rounded-lg shadow-md mb-8">
                         <h2 className="text-2xl font-bold mb-6 text-gray-900 border-b pb-3">Dashboard Overview</h2>
+
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                             <DashboardCard title="Total Projects" value={totalProjects} icon="📊" />
                             <DashboardCard title="Projects In Progress" value={inProgressProjects} icon="🚧" />
                             <DashboardCard title="Completed Projects" value={completedProjects} icon="✅" />
                             <DashboardCard title="Total Contract Value" value={`₱${totalContractAmount.toLocaleString()}`} icon="💰" />
                         </div>
+
                         <h3 className="text-xl font-bold mb-4 text-gray-900">Recent Projects</h3>
                         {projects.length === 0 ? (
-                             <p className="text-gray-600">No projects found.
+                            <p className="text-gray-600">No projects found.
                                 {isAdminLoggedIn && (
                                     <button onClick={() => setView('newProject')} className="text-blue-600 hover:underline ml-1">Add a new project</button>
                                 )}
                                 {!isAdminLoggedIn && (
-                                    <span> Please become an admin to add projects.</span>
+                                    <span> Please log in as admin to add projects.</span>
                                 )}
                             </p>
                         ) : (
@@ -661,7 +667,7 @@
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
-                                        {projects.slice(0, 5).map(project => {
+                                        {projects.slice(0, 5).map(project => { // Show top 5 recent projects
                                             const totalPaid = project.payments ? project.payments.reduce((sum, payment) => sum + payment.amount, 0) : 0;
                                             const progressPercentage = project.contractAmount > 0 ? ((totalPaid / project.contractAmount) * 100).toFixed(0) : 0;
                                             return (
@@ -710,14 +716,18 @@
                 const [error, setError] = useState(null);
                 const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
                 const [projectToDelete, setProjectToDelete] = useState(null);
-                const { showToast } = useContext(ToastContext);
+                const { showToast } = useContext(ToastContext); // Use ToastContext
 
                 useEffect(() => {
-                    if (!isAuthReady || !db || !userId) return;
+                    if (!isAuthReady || !db) return; // userId is not needed for public data path
 
-                    const projectsColRef = collection(db, `artifacts/${__app_id}/users/${userId}/projects`);
+                    // Changed to public data path
+                    const projectsColRef = collection(db, `artifacts/${__app_id}/public/data/projects`);
                     const unsubscribe = onSnapshot(projectsColRef, (snapshot) => {
-                        const projectsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        const projectsData = snapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data()
+                        }));
                         setProjects(projectsData);
                         setLoading(false);
                     }, (err) => {
@@ -728,7 +738,7 @@
                     });
 
                     return () => unsubscribe();
-                }, [db, userId, isAuthReady, showToast]);
+                }, [db, isAuthReady, showToast]); // Removed userId from dependency array
 
                 const handleDeleteClick = (project) => {
                     setProjectToDelete(project);
@@ -736,9 +746,10 @@
                 };
 
                 const confirmDelete = async () => {
-                    if (!db || !userId || !projectToDelete) return;
+                    if (!db || !projectToDelete) return; // userId is not needed for public data path
                     try {
-                        const projectDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/projects`, projectToDelete.id);
+                        // Changed to public data path
+                        const projectDocRef = doc(db, `artifacts/${__app_id}/public/data/projects`, projectToDelete.id);
                         await deleteDoc(projectDocRef);
                         setShowDeleteConfirm(false);
                         setProjectToDelete(null);
@@ -761,6 +772,7 @@
                 return (
                     <div className="bg-white p-6 rounded-lg shadow-md">
                         <h2 className="text-2xl font-bold mb-6 text-gray-900 border-b pb-3">All Projects</h2>
+
                         {isAdminLoggedIn && (
                             <div className="mb-6 flex justify-end">
                                 <button
@@ -771,13 +783,14 @@
                                 </button>
                             </div>
                         )}
+
                         {projects.length === 0 ? (
                             <p className="text-gray-600 text-center py-10">No projects listed yet.
                                 {isAdminLoggedIn && (
                                     <button onClick={() => setView('newProject')} className="text-blue-600 hover:underline ml-1">Click here to add a new project!</button>
                                 )}
                                 {!isAdminLoggedIn && (
-                                    <span> Please become an admin to add projects.</span>
+                                    <span> Please log in as admin to add projects.</span>
                                 )}
                             </p>
                         ) : (
@@ -856,14 +869,15 @@
                 const [errors, setErrors] = useState({});
                 const [isSubmitting, setIsSubmitting] = useState(false);
                 const [message, setMessage] = useState({ type: '', text: '' });
-                const isEditMode = !!projectId;
-                const { showToast } = useContext(ToastContext);
+                const isEditMode = !!projectId; // Determine if in edit mode
+                const { showToast } = useContext(ToastContext); // Use ToastContext
 
                 useEffect(() => {
-                    if (!isAuthReady || !db || !userId) return;
+                    if (!isAuthReady || !db) return; // userId is not needed for public data path
 
                     if (isEditMode) {
-                        const projectDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/projects`, projectId);
+                        // Changed to public data path
+                        const projectDocRef = doc(db, `artifacts/${__app_id}/public/data/projects`, projectId);
                         const fetchProject = async () => {
                             try {
                                 const docSnap = await getDoc(projectDocRef);
@@ -872,7 +886,7 @@
                                 } else {
                                     setMessage({ type: 'error', text: 'Project not found for editing.' });
                                     showToast('Project not found for editing.', 'error');
-                                    setTimeout(() => setView('projects'), 1500);
+                                    setTimeout(() => setView('projects'), 1500); // Redirect if not found
                                 }
                             } catch (err) {
                                 console.error("Error fetching project for edit:", err);
@@ -882,6 +896,7 @@
                         };
                         fetchProject();
                     } else {
+                        // Reset form for new project if not in edit mode
                         setFormData({
                             projectName: '',
                             clientName: '',
@@ -890,12 +905,12 @@
                             contractAmount: '',
                         });
                     }
-                }, [db, userId, isAuthReady, projectId, isEditMode, setView, showToast]);
+                }, [db, isAuthReady, projectId, isEditMode, setView, showToast]); // Removed userId from dependency array
 
                 const handleChange = (e) => {
                     const { name, value } = e.target;
                     setFormData(prev => ({ ...prev, [name]: value }));
-                    setErrors(prev => ({ ...prev, [name]: '' }));
+                    setErrors(prev => ({ ...prev, [name]: '' })); // Clear error on change
                 };
 
                 const validateForm = () => {
@@ -913,7 +928,7 @@
 
                 const handleSubmit = async (e) => {
                     e.preventDefault();
-                    setMessage({ type: '', text: '' });
+                    setMessage({ type: '', text: '' }); // Clear previous messages
 
                     if (!validateForm()) {
                         setMessage({ type: 'error', text: 'Please correct the errors in the form.' });
@@ -921,7 +936,7 @@
                         return;
                     }
 
-                    if (!isAuthReady || !db || !userId) {
+                    if (!isAuthReady || !db) { // userId is not needed for public data path
                         setMessage({ type: 'error', text: 'Authentication not ready. Please try again.' });
                         showToast('Authentication not ready. Please try again.', 'error');
                         return;
@@ -930,7 +945,8 @@
                     setIsSubmitting(true);
                     try {
                         if (isEditMode) {
-                            const projectDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/projects`, projectId);
+                            // Changed to public data path
+                            const projectDocRef = doc(db, `artifacts/${__app_id}/public/data/projects`, projectId);
                             await updateDoc(projectDocRef, {
                                 ...formData,
                                 contractAmount: parseFloat(formData.contractAmount),
@@ -938,7 +954,8 @@
                             setMessage({ type: 'success', text: 'Project updated successfully!' });
                             showToast('Project updated successfully!', 'success');
                         } else {
-                            const projectsColRef = collection(db, `artifacts/${__app_id}/users/${userId}/projects`);
+                            // Changed to public data path
+                            const projectsColRef = collection(db, `artifacts/${__app_id}/public/data/projects`);
                             await addDoc(projectsColRef, {
                                 ...formData,
                                 contractAmount: parseFloat(formData.contractAmount),
@@ -952,7 +969,7 @@
                         }
                         setTimeout(() => {
                             setView('projects');
-                            setSelectedProjectId(null);
+                            setSelectedProjectId(null); // Clear selected project after saving
                         }, 1500);
                     } catch (err) {
                         console.error("Error saving project: ", err);
@@ -1077,17 +1094,18 @@
                 const [error, setError] = useState(null);
                 const [showAddPaymentModal, setShowAddPaymentModal] = useState(false);
                 const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
-                const [showAddAdditionalModal, setShowAddAdditionalModal] = useState(false);
-                const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-                const [itemToDelete, setItemToDelete] = useState(null);
-                const [deleteType, setDeleteType] = useState('');
-                const { showToast } = useContext(ToastContext);
+                const [showAddAdditionalModal, setShowAddAdditionalModal] = useState(false); // New state for additionals modal
+                const [showDeleteConfirm, setShowDeleteConfirm] = useState(false); // Generic delete confirm
+                const [itemToDelete, setItemToDelete] = useState(null); // Item to delete
+                const [deleteType, setDeleteType] = useState(''); // 'payment', 'expense', 'additional'
+                const { showToast } = useContext(ToastContext); // Use ToastContext
 
 
                 useEffect(() => {
-                    if (!isAuthReady || !db || !userId) return;
+                    if (!isAuthReady || !db) return; // userId is not needed for public data path
 
-                    const projectDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/projects`, projectId);
+                    // Changed to public data path
+                    const projectDocRef = doc(db, `artifacts/${__app_id}/public/data/projects`, projectId);
                     const unsubscribe = onSnapshot(projectDocRef, (docSnap) => {
                         if (docSnap.exists()) {
                             setProject({ id: docSnap.id, ...docSnap.data() });
@@ -1104,12 +1122,13 @@
                     });
 
                     return () => unsubscribe();
-                }, [db, userId, isAuthReady, projectId, showToast]);
+                }, [db, isAuthReady, projectId, showToast]); // Removed userId from dependency array
 
                 const handleAddPayment = async (paymentData) => {
-                    if (!db || !userId || !projectId) return;
+                    if (!db || !projectId) return; // userId is not needed for public data path
                     try {
-                        const projectDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/projects`, projectId);
+                        // Changed to public data path
+                        const projectDocRef = doc(db, `artifacts/${__app_id}/public/data/projects`, projectId);
                         await updateDoc(projectDocRef, {
                             payments: arrayUnion(paymentData)
                         });
@@ -1128,14 +1147,19 @@
                 };
 
                 const confirmDelete = async () => {
-                    if (!db || !userId || !projectId || !itemToDelete) return;
+                    if (!db || !projectId || !itemToDelete) return; // userId is not needed for public data path
                     try {
-                        const projectDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/projects`, projectId);
+                        // Changed to public data path
+                        const projectDocRef = doc(db, `artifacts/${__app_id}/public/data/projects`, projectId);
                         if (deleteType === 'payment') {
-                            await updateDoc(projectDocRef, { payments: arrayRemove(itemToDelete) });
+                            await updateDoc(projectDocRef, {
+                                payments: arrayRemove(itemToDelete)
+                            });
                             showToast('Payment deleted successfully!', 'success');
                         } else if (deleteType === 'expense') {
-                            await updateDoc(projectDocRef, { expenses: arrayRemove(itemToDelete) });
+                            await updateDoc(projectDocRef, {
+                                expenses: arrayRemove(itemToDelete)
+                            });
                             showToast('Expense deleted successfully!', 'success');
                         } else if (deleteType === 'additional') {
                             const currentProjectSnap = await getDoc(projectDocRef);
@@ -1166,9 +1190,10 @@
 
 
                 const handleAddExpense = async (expenseData) => {
-                    if (!db || !userId || !projectId) return;
+                    if (!db || !projectId) return; // userId is not needed for public data path
                     try {
-                        const projectDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/projects`, projectId);
+                        // Changed to public data path
+                        const projectDocRef = doc(db, `artifacts/${__app_id}/public/data/projects`, projectId);
                         await updateDoc(projectDocRef, {
                             expenses: arrayUnion(expenseData)
                         });
@@ -1181,9 +1206,10 @@
                 };
 
                 const handleAddAdditional = async (additionalData) => {
-                    if (!db || !userId || !projectId) return;
+                    if (!db || !projectId) return; // userId is not needed for public data path
                     try {
-                        const projectDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/projects`, projectId);
+                        // Changed to public data path
+                        const projectDocRef = doc(db, `artifacts/${__app_id}/public/data/projects`, projectId);
                         const currentProjectSnap = await getDoc(projectDocRef);
                         if (currentProjectSnap.exists()) {
                             const currentProject = currentProjectSnap.data();
@@ -1209,10 +1235,14 @@
                 const totalPaid = project.payments ? project.payments.reduce((sum, payment) => sum + payment.amount, 0) : 0;
                 const totalExpenses = project.expenses ? project.expenses.reduce((sum, expense) => sum + expense.amount, 0) : 0;
                 const remainingBalance = project.contractAmount - totalPaid;
-                const profitLoss = totalPaid - totalExpenses;
+                const profitLoss = totalPaid - totalExpenses; // Simplified profit/loss calculation based on payments received vs. expenses
+
+                // New granular billing logic: Recommend billing if unbilled expenses exceed a threshold
                 const unbilledExpenses = totalExpenses - totalPaid;
-                const minimumBillingThreshold = 10000;
+                const minimumBillingThreshold = 10000; // Recommend billing if unbilled expenses exceed ₱10,000
+
                 const isBillingRecommended = unbilledExpenses > minimumBillingThreshold;
+
                 const progressPercentage = project.contractAmount > 0 ? ((totalPaid / project.contractAmount) * 100).toFixed(2) : 0;
                 const isOverExpenses = profitLoss < 0;
 
@@ -1280,10 +1310,12 @@
                                                 <tr>
                                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th> {/* New column for Payment Type */}
                                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mode</th>
                                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
-                                                    {isAdminLoggedIn && <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>}
+                                                    {isAdminLoggedIn && (
+                                                        <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                                    )}
                                                 </tr>
                                             </thead>
                                             <tbody className="bg-white divide-y divide-gray-200">
@@ -1291,7 +1323,7 @@
                                                     <tr key={index}>
                                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{payment.date}</td>
                                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">₱{payment.amount.toLocaleString()}</td>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{payment.paymentType || 'N/A'}</td>
+                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{payment.paymentType || 'N/A'}</td> {/* Display Payment Type */}
                                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{payment.modeOfPayment}</td>
                                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                                             {payment.modeOfPayment === 'Check' && `Bank: ${payment.bankName}, Check No: ${payment.checkNo}`}
@@ -1338,10 +1370,12 @@
                                                 <tr>
                                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th> {/* New column for Expense Type */}
                                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Recipient No.</th>
                                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                                                    {isAdminLoggedIn && <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>}
+                                                    {isAdminLoggedIn && (
+                                                        <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                                    )}
                                                 </tr>
                                             </thead>
                                             <tbody className="bg-white divide-y divide-gray-200">
@@ -1349,7 +1383,7 @@
                                                     <tr key={index}>
                                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{expense.date}</td>
                                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">₱{expense.amount.toLocaleString()}</td>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{expense.expenseType || 'N/A'}</td>
+                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{expense.expenseType || 'N/A'}</td> {/* Display Expense Type */}
                                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{expense.deliveryRecipientNo || 'N/A'}</td>
                                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{expense.description}</td>
                                                         {isAdminLoggedIn && (
@@ -1379,6 +1413,8 @@
                             <p className="mb-1"><span className="font-medium">Total Expenses:</span> ₱{totalExpenses.toLocaleString()}</p>
                             <p className="mb-1"><span className="font-medium">Total Payments Received:</span> ₱{totalPaid.toLocaleString()}</p>
                             <p className="mb-3"><span className="font-medium">Unbilled Expenses:</span> ₱{unbilledExpenses.toLocaleString()}</p>
+
+
                             {isBillingRecommended ? (
                                 <div className="p-3 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700">
                                     <p className="font-semibold">Recommendation: Consider submitting a billing report.</p>
@@ -1413,7 +1449,9 @@
                                                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                                                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                                                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                                                {isAdminLoggedIn && <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>}
+                                                {isAdminLoggedIn && (
+                                                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                                )}
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-200">
@@ -1491,7 +1529,7 @@
                     letterBodyParagraph: '',
                     signatoryName: '',
                     signatoryTitle: '',
-                    logoUrl: '',
+                    logoUrl: '', // Initialize as empty string
                     defaultProjectName: 'Sample Project',
                     defaultLocation: 'Sample Location',
                     defaultSubject: 'Sample Subject',
@@ -1503,20 +1541,27 @@
                 });
                 const [loading, setLoading] = useState(true);
                 const [message, setMessage] = useState({ type: '', text: '' });
-                const { showToast } = useContext(ToastContext);
+                const { showToast } = useContext(ToastContext); // Use ToastContext
 
                 useEffect(() => {
-                    if (!isAuthReady || !db || !userId) return;
+                    if (!isAuthReady || !db) { // userId is not needed for public data path
+                        console.log("TemplateEditor useEffect: Firebase not ready.");
+                        return;
+                    }
 
-                    const templateDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/templates`, 'billingTemplate');
+                    // Changed to public data path
+                    const templateDocRef = doc(db, `artifacts/${__app_id}/public/data/templates`, 'billingTemplate');
                     const fetchTemplate = async () => {
                         try {
+                            console.log("TemplateEditor: Attempting to fetch template from Firestore.");
                             const docSnap = await getDoc(templateDocRef);
                             if (docSnap.exists()) {
                                 const data = docSnap.data();
+                                console.log("TemplateEditor: Fetched template data:", data);
                                 setTemplateData(prev => ({
-                                    ...prev,
-                                    ...data,
+                                    ...prev, // Keep existing state values not explicitly overwritten by data
+                                    ...data, // Overwrite with fetched data
+                                    // Ensure default preview fields are handled correctly (they are not saved to DB, only for local state)
                                     defaultProjectName: data.defaultProjectName || 'Sample Project',
                                     defaultLocation: data.defaultLocation || 'Sample Location',
                                     defaultSubject: data.defaultSubject || 'Sample Subject',
@@ -1525,9 +1570,12 @@
                                     defaultAttention: data.defaultAttention || 'Mr./Ms. Client Representative',
                                     defaultBilledAmount: data.defaultBilledAmount || 100000,
                                     defaultDescriptionOfWork: data.defaultDescriptionOfWork || 'General electrical works',
-                                    logoUrl: data.logoUrl || '',
+                                    logoUrl: data.logoUrl || '', // Ensure logoUrl defaults to empty if not present in DB
                                 }));
+                                console.log("TemplateEditor: Fetched logoUrl from Firebase:", data.logoUrl);
                             } else {
+                                // Set default values if no template exists in Firebase
+                                console.log("TemplateEditor: No template found in Firebase, setting defaults.");
                                 setTemplateData({
                                     companyName: "D.L.Verano's Electrical Supply and Services",
                                     address: "72 BULELAK ST. MALANDAY, MARIKINA CITY",
@@ -1535,7 +1583,7 @@
                                     letterBodyParagraph: "We are submitting herewith a billing for the above subject for the supply of labor, materials & supervision for a partial work accomplishment computed as follows:",
                                     signatoryName: "ENGR. DANTE L. VERANO",
                                     signatoryTitle: "General Manager",
-                                    logoUrl: "",
+                                    logoUrl: "", // Default to empty string if no template exists
                                     defaultProjectName: 'Sample Project',
                                     defaultLocation: 'Sample Location',
                                     defaultSubject: 'Sample Subject',
@@ -1556,7 +1604,7 @@
                     };
 
                     fetchTemplate();
-                }, [db, userId, isAuthReady, showToast]);
+                }, [db, isAuthReady, showToast]); // Removed userId from dependency array
 
                 const handleChange = (e) => {
                     const { name, value } = e.target;
@@ -1564,14 +1612,16 @@
                 };
 
                 const handleSave = async () => {
-                    if (!db || !userId) {
+                    if (!db) { // userId is not needed for public data path
                         setMessage({ type: 'error', text: 'Firebase not initialized. Cannot save.' });
                         showToast('Firebase not initialized. Cannot save.', 'error');
                         return;
                     }
                     try {
-                        const templateDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/templates`, 'billingTemplate');
+                        // Changed to public data path
+                        const templateDocRef = doc(db, `artifacts/${__app_id}/public/data/templates`, 'billingTemplate');
                         const dataToSave = { ...templateData };
+                        // Remove default preview fields before saving to Firebase
                         delete dataToSave.defaultProjectName;
                         delete dataToSave.defaultLocation;
                         delete dataToSave.defaultSubject;
@@ -1580,6 +1630,15 @@
                         delete dataToSave.defaultAttention;
                         delete dataToSave.defaultBilledAmount;
                         delete dataToSave.defaultDescriptionOfWork;
+                        delete dataToSave.headerElectricalSupply;
+                        delete dataToSave.headerSupplyDetails;
+                        delete dataToSave.defaultRetention;
+                        delete dataToSave.defaultRecoupment;
+                        delete dataToSave.defaultPartialPayments;
+
+
+                        console.log("TemplateEditor: Saving template data to Firebase:", dataToSave);
+                        console.log("TemplateEditor: Attempting to save logoUrl:", dataToSave.logoUrl);
                         await setDoc(templateDocRef, dataToSave, { merge: true });
                         setMessage({ type: 'success', text: 'Template saved successfully!' });
                         showToast('Template saved successfully!', 'success');
@@ -1629,6 +1688,15 @@
                     );
                 }
 
+                if (!isAdminLoggedIn) {
+                    return (
+                        <div className="bg-white p-6 rounded-lg shadow-md max-w-2xl mx-auto text-center py-10">
+                            <h2 className="text-2xl font-bold mb-4 text-gray-900">Access Denied</h2>
+                            <p className="text-gray-600">You need admin privileges to access the Template Editor.</p>
+                        </div>
+                    );
+                }
+
                 return (
                     <div className="bg-white p-6 rounded-lg shadow-md">
                         <h2 className="text-2xl font-bold mb-6 text-gray-900 border-b pb-3">Billing Report Template Editor</h2>
@@ -1640,6 +1708,8 @@
                         )}
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            {/* Company Header Fields */}
+                            {/* Added Logo URL Input */}
                             <div className="col-span-1 md:col-span-2">
                                 <label htmlFor="logoUrl" className="block text-sm font-medium text-gray-700 mb-1">Company Logo URL</label>
                                 <input
@@ -1670,6 +1740,8 @@
                                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                                 <input type="email" id="email" name="email" value={templateData.email} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
                             </div>
+
+                            {/* Letter Body Fields - These are for default/preview purposes in the template editor */}
                             <h3 className="col-span-full text-lg font-semibold mt-4 mb-2 text-gray-800">Default/Preview Fields for Letter Body</h3>
                             <div>
                                 <label htmlFor="defaultProjectName" className="block text-sm font-medium text-gray-700 mb-1">Default Project Name</label>
@@ -1703,6 +1775,9 @@
                                 <label htmlFor="defaultDescriptionOfWork" className="block text-sm font-medium text-gray-700 mb-1">Default Description of Work (for preview)</label>
                                 <input type="text" id="defaultDescriptionOfWork" name="defaultDescriptionOfWork" value={templateData.defaultDescriptionOfWork} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
                             </div>
+
+
+                            {/* Signature Fields */}
                             <h3 className="col-span-full text-lg font-semibold mt-4 mb-2 text-gray-800">Signature Details</h3>
                             <div>
                                 <label htmlFor="signatoryName" className="block text-sm font-medium text-gray-700 mb-1">Signatory Name</label>
@@ -1748,18 +1823,20 @@
                 const [loadingTemplate, setLoadingTemplate] = useState(true);
                 const [isEditing, setIsEditing] = useState(false);
                 const [editableReportData, setEditableReportData] = useState(reportData);
-                const { showToast } = useContext(ToastContext);
+                const { showToast } = useContext(ToastContext); // Use ToastContext
 
                 useEffect(() => {
-                    if (!isAuthReady || !db || !userId) return;
+                    if (!isAuthReady || !db) return; // userId is not needed for public data path
 
-                    const templateDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/templates`, 'billingTemplate');
+                    // Changed to public data path
+                    const templateDocRef = doc(db, `artifacts/${__app_id}/public/data/templates`, 'billingTemplate');
                     const fetchTemplate = async () => {
                         try {
                             const docSnap = await getDoc(templateDocRef);
                             if (docSnap.exists()) {
                                 setTemplate(docSnap.data());
                             } else {
+                                // Fallback to default if no template saved
                                 setTemplate({
                                     companyName: "D.L.Verano's Electrical Supply and Services",
                                     address: "72 BULELAK ST. MALANDAY, MARIKINA CITY",
@@ -1767,12 +1844,13 @@
                                     letterBodyParagraph: "We are submitting herewith a billing for the above subject for the supply of labor, materials & supervision for a partial work accomplishment computed as follows:",
                                     signatoryName: "ENGR. DANTE L. VERANO",
                                     signatoryTitle: "General Manager",
-                                    logoUrl: "",
+                                    logoUrl: "", // Default logo to empty
                                 });
                             }
                         } catch (err) {
                             console.error("Error fetching template for display:", err);
                             showToast('Failed to load template for report display.', 'error');
+                            // Continue with default template if error occurs
                             setTemplate({
                                 companyName: "D.L.Verano's Electrical Supply and Services",
                                 address: "72 BULELAK ST. MALANDAY, MARIKINA CITY",
@@ -1780,7 +1858,7 @@
                                 letterBodyParagraph: "We are submitting herewith a billing for the above subject for the supply of labor, materials & supervision for a partial work accomplishment computed as follows:",
                                 signatoryName: "ENGR. DANTE L. VERANO",
                                 signatoryTitle: "General Manager",
-                                logoUrl: "",
+                                logoUrl: "", // Default logo to empty
                             });
                         } finally {
                             setLoadingTemplate(false);
@@ -1788,9 +1866,10 @@
                     };
 
                     fetchTemplate();
-                }, [db, userId, isAuthReady, showToast]);
+                }, [db, isAuthReady, showToast]); // Removed userId from dependency array
 
                 useEffect(() => {
+                    // Update editableReportData when reportData prop changes (e.g., when a new report is generated)
                     setEditableReportData(reportData);
                 }, [reportData]);
 
@@ -1805,18 +1884,30 @@
                         const field = name.split('.')[1];
                         setEditableReportData(prev => ({
                             ...prev,
-                            reportDetails: { ...prev.reportDetails, [field]: value }
+                            reportDetails: {
+                                ...prev.reportDetails,
+                                [field]: value
+                            }
                         }));
-                    } else if (['billedAmount', 'lessRetentionAmount', 'recoupmentAmount', 'totalPartialPayments', 'netCollectibles', 'recoupmentFromDownpayment', 'workAccomplishmentPercentage'].includes(name)) {
-                        setEditableReportData(prev => ({ ...prev, [name]: parseFloat(value) || 0 }));
+                    } else if (name === 'billedAmount' || name === 'lessRetentionAmount' || name === 'recoupmentAmount' || name === 'totalPartialPayments' || name === 'netCollectibles' || name === 'recoupmentFromDownpayment' || name === 'workAccomplishmentPercentage') {
+                        setEditableReportData(prev => ({
+                            ...prev,
+                            [name]: parseFloat(value) || 0 // Ensure numerical fields are parsed
+                        }));
                     } else if (name.startsWith('project.')) {
                         const field = name.split('.')[1];
                         setEditableReportData(prev => ({
                             ...prev,
-                            project: { ...prev.project, [field]: value }
+                            project: {
+                                ...prev.project,
+                                [field]: value
+                            }
                         }));
                     } else if (name === 'ownerName') {
-                        setEditableReportData(prev => ({ ...prev, ownerName: value }));
+                        setEditableReportData(prev => ({
+                            ...prev,
+                            ownerName: value
+                        }));
                     } else if (name.startsWith('partialPaymentsList')) {
                         const [_, index, field] = name.split('.');
                         const newPartialPaymentsList = [...editableReportData.partialPaymentsList];
@@ -1833,33 +1924,38 @@
                 };
 
                 const handleSaveReport = async () => {
-                    if (!db || !userId) {
+                    if (!db) { // userId is not needed for public data path
                         showToast('Firebase not initialized. Cannot save report.', 'error');
                         return;
                     }
 
                     try {
                         const reportToSave = { ...editableReportData };
+                        // Remove the `id` property if it's new, or use it for update
                         const reportId = reportToSave.id;
-                        delete reportToSave.id;
+                        delete reportToSave.id; // Ensure ID is not part of the data saved in the document itself
 
                         if (reportId) {
-                            const reportDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/reports`, reportId);
+                            // Update existing report
+                            // Changed to public data path
+                            const reportDocRef = doc(db, `artifacts/${__app_id}/public/data/reports`, reportId);
                             await updateDoc(reportDocRef, { reportData: JSON.stringify(reportToSave) });
                             showToast('Report updated in logs!', 'success');
                         } else {
-                            const reportsColRef = collection(db, `artifacts/${__app_id}/users/${userId}/reports`);
+                            // Add new report
+                            // Changed to public data path
+                            const reportsColRef = collection(db, `artifacts/${__app_id}/public/data/reports`);
                             const newReportDocRef = await addDoc(reportsColRef, {
                                 type: 'billing',
                                 projectId: editableReportData.project.id,
                                 reportName: `BILLING REPORT - ${editableReportData.project.projectName} - ${editableReportData.reportDetails.date}`,
-                                reportData: JSON.stringify(reportToSave),
+                                reportData: JSON.stringify(reportToSave), // Store as JSON string
                                 createdAt: new Date().toISOString(),
                             });
-                            setGeneratedReportData(prev => ({ ...prev, id: newReportDocRef.id }));
+                            setGeneratedReportData(prev => ({ ...prev, id: newReportDocRef.id })); // Update state with new ID
                             showToast('Report saved to logs!', 'success');
                         }
-                        setIsEditing(false);
+                        setIsEditing(false); // Exit edit mode after saving
                     } catch (err) {
                         console.error("Error saving report to logs:", err);
                         showToast('Failed to save report to logs.', 'error');
@@ -1867,28 +1963,37 @@
                 };
 
                 const handlePrint = () => {
-                    setTimeout(() => window.print(), 100);
+                    console.log("Attempting to print report...");
+                    // Give a small delay for state update to propagate before printing
+                    setTimeout(() => {
+                        window.print();
+                    }, 100);
                 };
 
                 const handleBackToForm = () => {
-                    setGeneratedReportData(editableReportData);
+                    setGeneratedReportData(editableReportData); // Pass current edited data back to the form
                     setView('createBilling');
                 };
 
+                // Values for computation display
                 const contractAmountForDisplay = editableReportData?.project?.contractAmount;
                 const workAccomplishmentPercentageForDisplay = editableReportData?.workAccomplishmentPercentage || 0;
                 const recoupmentFromDownpaymentForDisplay = editableReportData?.recoupmentFromDownpayment || 0;
+
+                // Ensure all displayed amounts are derived from editableReportData
                 const billedAmount = editableReportData?.billedAmount !== undefined ? editableReportData.billedAmount : 0;
                 const lessRetentionAmount = editableReportData?.lessRetentionAmount !== undefined ? editableReportData.lessRetentionAmount : 0;
                 const recoupmentAmount = editableReportData?.recoupmentAmount !== undefined ? editableReportData.recoupmentAmount : 0;
                 const totalPartialPayments = editableReportData?.totalPartialPayments !== undefined ? editableReportData.totalPartialPayments : 0;
-                const netCollectibles = billedAmount - lessRetentionAmount - recoupmentAmount - totalPartialPayments;
+                const netCollectibles = billedAmount - lessRetentionAmount - recoupmentAmount - totalPartialPayments; // Recalculate netCollectibles here
                 const partialPaymentsList = editableReportData?.partialPaymentsList || [];
 
 
                 return (
                     <div className="bg-white p-8 rounded-lg shadow-md max-w-4xl mx-auto my-8 print:shadow-none print:p-0 print-area">
+                        {/* Report Header */}
                         <div className="text-center mb-10 pb-4 relative">
+                            {/* Logo added here */}
                             {template?.logoUrl && (
                                 <img
                                     src={template.logoUrl}
@@ -1904,40 +2009,114 @@
                             </div>
                         </div>
 
+                        {/* Project and Billing Details */}
                         <div className="mb-8 text-lg">
                             <div className="grid grid-cols-2 gap-x-4 gap-y-2 mb-6">
                                 <p>
                                     <span className="font-semibold w-24 inline-block">Project</span> :
-                                    {isEditing ? <input type="text" name="project.projectName" value={editableReportData?.project?.projectName || ''} onChange={handleFieldChange} className="border rounded px-2 py-1 w-48" /> : editableReportData?.project?.projectName}
+                                    {isEditing ? (
+                                        <input
+                                            type="text"
+                                            name="project.projectName"
+                                            value={editableReportData?.project?.projectName || ''}
+                                            onChange={handleFieldChange}
+                                            className="border rounded px-2 py-1 w-48"
+                                        />
+                                    ) : (
+                                        editableReportData?.project?.projectName
+                                    )}
                                 </p>
                                 <p>
                                     <span className="font-semibold w-24 inline-block">Location</span> :
-                                    {isEditing ? <input type="text" name="reportDetails.location" value={editableReportData?.reportDetails?.location || ''} onChange={handleFieldChange} className="border rounded px-2 py-1 w-48" /> : editableReportData?.reportDetails?.location}
+                                    {isEditing ? (
+                                        <input
+                                            type="text"
+                                            name="reportDetails.location"
+                                            value={editableReportData?.reportDetails?.location || ''}
+                                            onChange={handleFieldChange}
+                                            className="border rounded px-2 py-1 w-48"
+                                        />
+                                    ) : (
+                                        editableReportData?.reportDetails?.location
+                                    )}
                                 </p>
                                 <p>
                                     <span className="font-semibold w-24 inline-block">Owner</span> :
-                                    {isEditing ? <input type="text" name="ownerName" value={editableReportData?.ownerName || ''} onChange={handleFieldChange} className="border rounded px-2 py-1 w-48" /> : editableReportData?.ownerName}
+                                    {isEditing ? (
+                                        <input
+                                            type="text"
+                                            name="ownerName"
+                                            value={editableReportData?.ownerName || ''}
+                                            onChange={handleFieldChange}
+                                            className="border rounded px-2 py-1 w-48"
+                                        />
+                                    ) : (
+                                        editableReportData?.ownerName
+                                    )}
                                 </p>
                                 <p>
                                     <span className="font-semibold w-24 inline-block">Subject</span> :
-                                    {isEditing ? <input type="text" name="reportDetails.subject" value={editableReportData?.reportDetails?.subject || ''} onChange={handleFieldChange} className="border rounded px-2 py-1 w-48" /> : editableReportData?.reportDetails?.subject}
+                                    {isEditing ? (
+                                        <input
+                                            type="text"
+                                            name="reportDetails.subject"
+                                            value={editableReportData?.reportDetails?.subject || ''}
+                                            onChange={handleFieldChange}
+                                            className="border rounded px-2 py-1 w-48"
+                                        />
+                                    ) : (
+                                        editableReportData?.reportDetails?.subject
+                                    )}
                                 </p>
                                 <p>
                                     <span className="font-semibold w-24 inline-block">P.O. #</span> :
-                                    {isEditing ? <input type="text" name="reportDetails.poNumber" value={editableReportData?.reportDetails?.poNumber || ''} onChange={handleFieldChange} className="border rounded px-2 py-1 w-48" /> : editableReportData?.reportDetails?.poNumber}
+                                    {isEditing ? (
+                                        <input
+                                            type="text"
+                                            name="reportDetails.poNumber"
+                                            value={editableReportData?.reportDetails?.poNumber || ''}
+                                            onChange={handleFieldChange}
+                                            className="border rounded px-2 py-1 w-48"
+                                        />
+                                    ) : (
+                                        editableReportData?.reportDetails?.poNumber
+                                    )}
                                 </p>
                                 <p>
                                     <span className="font-semibold w-24 inline-block">Date</span> :
-                                    {isEditing ? <input type="date" name="reportDetails.date" value={editableReportData?.reportDetails?.date || ''} onChange={handleFieldChange} className="border rounded px-2 py-1 w-48" /> : editableReportData?.reportDetails?.date}
+                                    {isEditing ? (
+                                        <input
+                                            type="date"
+                                            name="reportDetails.date"
+                                            value={editableReportData?.reportDetails?.date || ''}
+                                            onChange={handleFieldChange}
+                                            className="border rounded px-2 py-1 w-48"
+                                        />
+                                    ) : (
+                                        editableReportData?.reportDetails?.date
+                                    )}
                                 </p>
                             </div>
                             <p className="mb-6">
                                 <span className="font-semibold">Attention</span> :
-                                {isEditing ? <input type="text" name="reportDetails.attention" value={editableReportData?.reportDetails?.attention || ''} onChange={handleFieldChange} className="border rounded px-2 py-1 w-96" /> : editableReportData?.reportDetails?.attention}
+                                {isEditing ? (
+                                    <input
+                                        type="text"
+                                        name="reportDetails.attention"
+                                        value={editableReportData?.reportDetails?.attention || ''}
+                                        onChange={handleFieldChange}
+                                        className="border rounded px-2 py-1 w-96"
+                                    />
+                                ) : (
+                                    editableReportData?.reportDetails?.attention
+                                )}
                             </p>
                             <p className="mb-6">Sir,</p>
-                            <p className="mb-6 indent-8 text-justify">{template?.letterBodyParagraph}</p>
+                            <p className="mb-6 indent-8 text-justify">
+                                {template?.letterBodyParagraph}
+                            </p>
 
+                            {/* Billing Breakdown */}
                             <div className="mb-8 border-t border-gray-300 pt-6">
                                 <div className="flex justify-between items-center mb-2">
                                     <p className="font-semibold">Contract Amount:</p>
@@ -1945,26 +2124,99 @@
                                 </div>
                                 <div className="flex justify-between items-center mb-2">
                                     <p className="font-semibold">
-                                        Billed Amount (Contract x {isEditing ? <input type="number" name="workAccomplishmentPercentage" value={editableReportData?.workAccomplishmentPercentage || 0} onChange={handleFieldChange} className="border rounded px-1 py-0.5 w-16 text-right" step="0.01" /> : workAccomplishmentPercentageForDisplay} %):
+                                        Billed Amount (Contract x
+                                        {isEditing ? (
+                                            <input
+                                                type="number"
+                                                name="workAccomplishmentPercentage"
+                                                value={editableReportData?.workAccomplishmentPercentage || 0}
+                                                onChange={handleFieldChange}
+                                                className="border rounded px-1 py-0.5 w-16 text-right"
+                                                step="0.01"
+                                            />
+                                        ) : (
+                                            workAccomplishmentPercentageForDisplay
+                                        )}
+                                        %):
                                     </p>
                                     <p className="font-bold text-xl">
-                                        {isEditing ? <input type="number" name="billedAmount" value={billedAmount} onChange={handleFieldChange} className="border rounded px-2 py-1 w-32 text-right" step="0.01" /> : `₱${billedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                        {isEditing ? (
+                                            <input
+                                                type="number"
+                                                name="billedAmount"
+                                                value={billedAmount}
+                                                onChange={handleFieldChange}
+                                                className="border rounded px-2 py-1 w-32 text-right"
+                                                step="0.01"
+                                            />
+                                        ) : (
+                                            `₱${billedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                        )}
                                     </p>
                                 </div>
                                 <div className="flex justify-between items-center mb-2">
                                     <p className="font-semibold">
-                                        Less: Retention ({isEditing ? <input type="number" name="lessRetentionAmount" value={lessRetentionAmount} onChange={handleFieldChange} className="border rounded px-2 py-1 w-32 text-right" step="0.01" /> : `₱${lessRetentionAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}):
+                                        Less: Retention (
+                                        {isEditing ? (
+                                            <input
+                                                type="number"
+                                                name="lessRetentionAmount"
+                                                value={lessRetentionAmount}
+                                                onChange={handleFieldChange}
+                                                className="border rounded px-2 py-1 w-32 text-right"
+                                                step="0.01"
+                                            />
+                                        ) : (
+                                            `₱${lessRetentionAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                        )}
+                                        ):
                                     </p>
                                     <p className="font-bold text-xl">
-                                        {isEditing ? <input type="number" name="lessRetentionAmount" value={lessRetentionAmount} onChange={handleFieldChange} className="border rounded px-2 py-1 w-32 text-right" step="0.01" /> : `- ₱${lessRetentionAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                        {isEditing ? (
+                                            <input
+                                                type="number"
+                                                name="lessRetentionAmount"
+                                                value={lessRetentionAmount}
+                                                onChange={handleFieldChange}
+                                                className="border rounded px-2 py-1 w-32 text-right"
+                                                step="0.01"
+                                            />
+                                        ) : (
+                                            `- ₱${lessRetentionAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                        )}
                                     </p>
                                 </div>
+                                {/* New Recoupment from D/P line item with computation */}
                                 <div className="flex justify-between items-center mb-2">
                                     <p className="font-semibold">
-                                        Less: Recoupment from D/P (₱ {isEditing ? <input type="number" name="recoupmentFromDownpayment" value={recoupmentFromDownpaymentForDisplay} onChange={handleFieldChange} className="border rounded px-1 py-0.5 w-24 text-right" step="0.01" /> : recoupmentFromDownpaymentForDisplay.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} x {workAccomplishmentPercentageForDisplay}%):
+                                        Less: Recoupment from D/P (₱
+                                        {isEditing ? (
+                                            <input
+                                                type="number"
+                                                name="recoupmentFromDownpayment"
+                                                value={recoupmentFromDownpaymentForDisplay}
+                                                onChange={handleFieldChange}
+                                                className="border rounded px-1 py-0.5 w-24 text-right"
+                                                step="0.01"
+                                            />
+                                        ) : (
+                                            recoupmentFromDownpaymentForDisplay.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                        )}
+                                        x {workAccomplishmentPercentageForDisplay}%):
                                     </p>
                                     <p className="font-bold text-xl">
-                                        {isEditing ? <input type="number" name="recoupmentAmount" value={recoupmentAmount} onChange={handleFieldChange} className="border rounded px-2 py-1 w-32 text-right" step="0.01" /> : `- ₱${recoupmentAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                        {isEditing ? (
+                                            <input
+                                                type="number"
+                                                name="recoupmentAmount"
+                                                value={recoupmentAmount}
+                                                onChange={handleFieldChange}
+                                                className="border rounded px-2 py-1 w-32 text-right"
+                                                step="0.01"
+                                            />
+                                        ) : (
+                                            `- ₱${recoupmentAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                        )}
                                     </p>
                                 </div>
                                 {partialPaymentsList.length > 0 && (
@@ -1973,31 +2225,78 @@
                                         {partialPaymentsList.map((payment, index) => (
                                             <div key={index} className="flex justify-between items-center mb-1 ml-4">
                                                 <p className="text-sm text-gray-700">
-                                                    {isEditing ? <input type="text" name={`partialPaymentsList.${index}.description`} value={payment.description || ''} onChange={handleFieldChange} className="border rounded px-1 py-0.5 w-48" /> : (payment.description || `Payment ${index + 1}`)} ({payment.date}):
+                                                    {isEditing ? (
+                                                        <input
+                                                            type="text"
+                                                            name={`partialPaymentsList.${index}.description`}
+                                                            value={payment.description || ''}
+                                                            onChange={handleFieldChange}
+                                                            className="border rounded px-1 py-0.5 w-48"
+                                                        />
+                                                    ) : (
+                                                        payment.description || `Payment ${index + 1}`
+                                                    )}
+                                                    ({payment.date}):
                                                 </p>
                                                 <p className="text-sm font-semibold">
-                                                    - ₱ {isEditing ? <input type="number" name={`partialPaymentsList.${index}.amount`} value={payment.amount} onChange={handleFieldChange} className="border rounded px-1 py-0.5 w-24 text-right" step="0.01" /> : payment.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    - ₱
+                                                    {isEditing ? (
+                                                        <input
+                                                            type="number"
+                                                            name={`partialPaymentsList.${index}.amount`}
+                                                            value={payment.amount}
+                                                            onChange={handleFieldChange}
+                                                            className="border rounded px-1 py-0.5 w-24 text-right"
+                                                            step="0.01"
+                                                        />
+                                                    ) : (
+                                                        payment.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                                    )}
                                                 </p>
                                             </div>
                                         ))}
                                         <div className="flex justify-between items-center mt-2 border-t border-gray-200 pt-2">
                                             <p className="font-semibold">Total Partial Payments:</p>
                                             <p className="font-bold text-lg">
-                                                {isEditing ? <input type="number" name="totalPartialPayments" value={totalPartialPayments} onChange={handleFieldChange} className="border rounded px-2 py-1 w-32 text-right" step="0.01" /> : `- ₱${totalPartialPayments.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                                {isEditing ? (
+                                                    <input
+                                                        type="number"
+                                                        name="totalPartialPayments"
+                                                        value={totalPartialPayments}
+                                                        onChange={handleFieldChange}
+                                                        className="border rounded px-2 py-1 w-32 text-right"
+                                                        step="0.01"
+                                                    />
+                                                ) : (
+                                                    `- ₱${totalPartialPayments.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                                )}
                                             </p>
                                         </div>
                                     </div>
                                 )}
                             </div>
 
+                            {/* Net Collectibles */}
                             <div className="flex justify-end items-center mb-12 border-t-2 border-b-2 border-gray-900 py-2">
                                 <span className="text-xl font-bold mr-4">NET COLLECTIBLES:</span>
                                 <span className="text-2xl font-extrabold text-blue-800">
-                                    {isEditing ? <input type="number" name="netCollectibles" value={netCollectibles} onChange={handleFieldChange} className="border rounded px-2 py-1 w-40 text-right" step="0.01" /> : `₱${netCollectibles.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    {isEditing ? (
+                                        <input
+                                            type="number"
+                                            name="netCollectibles"
+                                            value={netCollectibles}
+                                            onChange={handleFieldChange}
+                                            className="border rounded px-2 py-1 w-40 text-right"
+                                            step="0.01"
+                                        />
+                                    ) : (
+                                        `₱${netCollectibles.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                    )}
                                 </span>
                             </div>
                         </div>
 
+                        {/* Signature Area */}
                         <div className="text-right mt-16 flex flex-col items-end">
                             <p className="mb-10">Very truly yours;</p>
                             <div className="border-b border-gray-700 w-72 mb-2"></div>
@@ -2005,19 +2304,55 @@
                             <p className="text-base text-gray-700">{template?.signatoryTitle}</p>
                         </div>
 
+                        {/* Control Buttons */}
                         <div className="mt-12 text-center print:hidden">
                             {!isEditing ? (
                                 <>
-                                    <button onClick={() => setIsEditing(true)} className="px-6 py-3 rounded-lg bg-yellow-600 text-white hover:bg-yellow-700 transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-opacity-50 mr-4">Edit Report</button>
-                                    <button onClick={handleBackToForm} className="px-6 py-3 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 mr-4">Back to Report Form</button>
-                                    <button onClick={handleSaveReport} className="px-6 py-3 rounded-lg bg-green-600 text-white hover:bg-green-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 mr-4">Save Report</button>
-                                    <button onClick={handlePrint} className="px-6 py-3 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">Print Report</button>
+                                    <button
+                                        onClick={() => setIsEditing(true)}
+                                        className="px-6 py-3 rounded-lg bg-yellow-600 text-white hover:bg-yellow-700 transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-opacity-50 mr-4"
+                                    >
+                                        Edit Report
+                                    </button>
+                                    <button
+                                        onClick={handleBackToForm}
+                                        className="px-6 py-3 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 mr-4"
+                                    >
+                                        Back to Report Form
+                                    </button>
+                                    <button
+                                        onClick={handleSaveReport}
+                                        className="px-6 py-3 rounded-lg bg-green-600 text-white hover:bg-green-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 mr-4"
+                                    >
+                                        Save Report
+                                    </button>
+                                    <button
+                                        onClick={handlePrint}
+                                        className="px-6 py-3 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+                                    >
+                                        Print Report
+                                    </button>
                                 </>
                             ) : (
                                 <>
-                                    <button onClick={handleSaveReport} className="px-6 py-3 rounded-lg bg-green-600 text-white hover:bg-green-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 mr-4">Save Changes</button>
-                                    <button onClick={() => setIsEditing(false)} className="px-6 py-3 rounded-lg bg-red-600 text-white hover:bg-red-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 mr-4">Cancel Edit</button>
-                                    <button onClick={handlePrint} className="px-6 py-3 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">Print</button>
+                                    <button
+                                        onClick={handleSaveReport}
+                                        className="px-6 py-3 rounded-lg bg-green-600 text-white hover:bg-green-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 mr-4"
+                                    >
+                                        Save Changes
+                                    </button>
+                                    <button
+                                        onClick={() => setIsEditing(false)} // Added cancel edit functionality
+                                        className="px-6 py-3 rounded-lg bg-red-600 text-white hover:bg-red-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 mr-4"
+                                    >
+                                        Cancel Edit
+                                    </button>
+                                    <button
+                                        onClick={handlePrint}
+                                        className="px-6 py-3 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+                                    >
+                                        Print
+                                    </button>
                                 </>
                             )}
                         </div>
@@ -2033,34 +2368,54 @@
                 const [selectedProject, setSelectedProject] = useState(null);
                 const [contractAmount, setContractAmount] = useState(initialReportData?.project?.contractAmount || 0);
                 const [workAccomplishmentPercentage, setWorkAccomplishmentPercentage] = useState(initialReportData?.workAccomplishmentPercentage?.toString() || '');
-                const [retentionPercentage, setRetentionPercentage] = useState(initialReportData?.reportDetails?.retentionPercentage?.toString() || '');
+                const [retentionPercentage, setRetentionPercentage] = useState(initialReportData?.reportDetails?.retentionPercentage?.toString() || ''); // Assuming retention percentage might be stored here or derived
                 const [recoupmentFromDownpayment, setRecoupmentFromDownpayment] = useState(initialReportData?.recoupmentFromDownpayment?.toString() || '');
                 const [projectPayments, setProjectPayments] = useState([]);
                 const [selectedPartialPayments, setSelectedPartialPayments] = useState(initialReportData?.partialPaymentsList || []);
                 const [errors, setErrors] = useState({});
                 const [message, setMessage] = useState({ type: '', text: '' });
-                const { showToast } = useContext(ToastContext);
+                const { showToast } = useContext(ToastContext); // Use ToastContext
 
-                const billedAmount = selectedProject && workAccomplishmentPercentage !== '' ? (contractAmount * (parseFloat(workAccomplishmentPercentage) / 100)) : 0;
-                const lessRetentionAmount = retentionPercentage !== '' ? (billedAmount * (parseFloat(retentionPercentage) / 100)) : 0;
-                const recoupmentAmount = recoupmentFromDownpayment !== '' && workAccomplishmentPercentage !== '' ? (parseFloat(recoupmentFromDownpayment) * (parseFloat(workAccomplishmentPercentage) / 100)) : 0;
+                // Calculated values (re-calculate based on current form state)
+                const billedAmount = selectedProject && workAccomplishmentPercentage !== ''
+                    ? (contractAmount * (parseFloat(workAccomplishmentPercentage) / 100))
+                    : 0;
+
+                const lessRetentionAmount = retentionPercentage !== ''
+                    ? (billedAmount * (parseFloat(retentionPercentage) / 100))
+                    : 0;
+
+                const recoupmentAmount = recoupmentFromDownpayment !== '' && workAccomplishmentPercentage !== ''
+                    ? (parseFloat(recoupmentFromDownpayment) * (parseFloat(workAccomplishmentPercentage) / 100))
+                    : 0;
+
                 const totalSelectedPartialPayments = selectedPartialPayments.reduce((sum, payment) => sum + payment.amount, 0);
+
                 const netCollectibles = billedAmount - lessRetentionAmount - recoupmentAmount - totalSelectedPartialPayments;
 
                 useEffect(() => {
-                    if (!isAuthReady || !db || !userId) return;
+                    if (!isAuthReady || !db) return; // userId is not needed for public data path
 
-                    const projectsColRef = collection(db, `artifacts/${__app_id}/users/${userId}/projects`);
+                    // Changed to public data path
+                    const projectsColRef = collection(db, `artifacts/${__app_id}/public/data/projects`);
                     const unsubscribe = onSnapshot(projectsColRef, (snapshot) => {
-                        const projectsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        const projectsData = snapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data()
+                        }));
                         setProjects(projectsData);
 
+                        // If initialReportData is provided, find and set the selected project
                         if (initialReportData && initialReportData.project && projectsData.length > 0) {
                             const preSelectedProject = projectsData.find(p => p.id === initialReportData.project.id);
                             if (preSelectedProject) {
                                 setSelectedProject(preSelectedProject);
                                 setContractAmount(preSelectedProject.contractAmount);
-                                const filteredPayments = preSelectedProject.payments ? preSelectedProject.payments.filter(p => p.paymentType !== 'Downpayment') : [];
+
+                                // Re-filter payments based on the pre-selected project
+                                const filteredPayments = preSelectedProject.payments
+                                    ? preSelectedProject.payments.filter(p => p.paymentType !== 'Downpayment')
+                                    : [];
                                 setProjectPayments(filteredPayments);
                             }
                         }
@@ -2071,7 +2426,7 @@
                     });
 
                     return () => unsubscribe();
-                }, [db, userId, isAuthReady, initialReportData, showToast]);
+                }, [db, isAuthReady, initialReportData, showToast]); // Removed userId from dependency array
 
 
                 const handleProjectChange = (e) => {
@@ -2082,9 +2437,15 @@
                     setContractAmount(project ? project.contractAmount : 0);
                     setWorkAccomplishmentPercentage('');
                     setRetentionPercentage('');
-                    const totalDownpayment = project && project.payments ? project.payments.filter(p => p.paymentType === 'Downpayment').reduce((sum, p) => sum + p.amount, 0) : 0;
+
+                    const totalDownpayment = project && project.payments
+                        ? project.payments.filter(p => p.paymentType === 'Downpayment').reduce((sum, p) => sum + p.amount, 0)
+                        : 0;
                     setRecoupmentFromDownpayment(totalDownpayment.toFixed(2));
-                    const filteredPayments = project && project.payments ? project.payments.filter(p => p.paymentType !== 'Downpayment') : [];
+
+                    const filteredPayments = project && project.payments
+                        ? project.payments.filter(p => p.paymentType !== 'Downpayment')
+                        : [];
                     setProjectPayments(filteredPayments);
                     setSelectedPartialPayments([]);
                     setErrors({});
@@ -2095,7 +2456,7 @@
                     if (isChecked) {
                         setSelectedPartialPayments(prev => [...prev, payment]);
                     } else {
-                        setSelectedPartialPayments(prev => prev.filter(p => p.date !== payment.date || p.amount !== payment.amount || p.description !== payment.description));
+                        setSelectedPartialPayments(prev => prev.filter(p => p.date !== payment.date || p.amount !== payment.amount || p.description !== payment.description)); // More robust check
                     }
                 };
 
@@ -2122,6 +2483,7 @@
                         return;
                     }
 
+
                     const reportDetails = {
                         location: selectedProject.location || 'N/A',
                         subject: `Billing for ${selectedProject.projectName}`,
@@ -2133,7 +2495,7 @@
                         lessRetentionAmount: lessRetentionAmount,
                         recoupmentAmount: recoupmentAmount,
                         totalPartialPayments: totalSelectedPartialPayments,
-                        partialPaymentsList: selectedPartialPayments,
+                        partialPaymentsList: selectedPartialPayments, // Pass the selected partial payments list
                     };
 
                     setGeneratedReportData({
@@ -2152,6 +2514,15 @@
                     setView('viewReport');
                     showToast('Billing report generated!', 'success');
                 };
+
+                if (!isAdminLoggedIn) {
+                    return (
+                        <div className="bg-white p-6 rounded-lg shadow-md max-w-2xl mx-auto text-center py-10">
+                            <h2 className="text-2xl font-bold mb-4 text-gray-900">Access Denied</h2>
+                            <p className="text-gray-600">You need admin privileges to create billing reports.</p>
+                        </div>
+                    );
+                }
 
                 return (
                     <div className="bg-white p-6 rounded-lg shadow-md max-w-3xl mx-auto">
@@ -2251,17 +2622,19 @@
                                 />
                             </div>
 
+                            {/* New Recoupment from Downpayment field */}
                             <div>
                                 <label htmlFor="recoupmentFromDownpayment" className="block text-sm font-medium text-gray-700 mb-1">Recoupment from Downpayment (₱)</label>
                                 <input
-                                    type="text"
+                                    type="text" // Changed to text as it's readOnly now
                                     id="recoupmentFromDownpayment"
                                     value={recoupmentFromDownpayment}
-                                    readOnly
+                                    readOnly // Made read-only
                                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 cursor-not-allowed sm:text-sm"
                                 />
                             </div>
 
+                            {/* Display calculated recoupment amount */}
                             <div>
                                 <label htmlFor="calculatedRecoupmentAmount" className="block text-sm font-medium text-gray-700 mb-1">Calculated Recoupment (₱)</label>
                                 <input
@@ -2273,8 +2646,12 @@
                                 />
                             </div>
 
+
+                            {/* Partial Payments Section - Now displays fetched payments with checkboxes */}
                             <div className="border border-gray-200 p-4 rounded-md bg-gray-50">
-                                <h3 className="text-lg font-semibold text-gray-800 mb-3">Select Partial Payments for Report</h3>
+                                <div className="flex justify-between items-center mb-3">
+                                    <h3 className="text-lg font-semibold text-gray-800">Select Partial Payments for Report</h3>
+                                </div>
                                 {projectPayments.length === 0 ? (
                                     <p className="text-sm text-gray-600">No payments recorded for this project yet.</p>
                                 ) : (
@@ -2285,7 +2662,7 @@
                                                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Include</th>
                                                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                                                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th> {/* Added Type column */}
                                                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
                                                 </tr>
                                             </thead>
@@ -2295,14 +2672,14 @@
                                                         <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-800">
                                                             <input
                                                                 type="checkbox"
-                                                                checked={selectedPartialPayments.some(p => p.date === payment.date && p.amount === payment.amount && p.description === payment.description)}
+                                                                checked={selectedPartialPayments.some(p => p.date === payment.date && p.amount === payment.amount && p.description === payment.description)} // Check by unique properties
                                                                 onChange={(e) => handlePartialPaymentSelection(payment, e.target.checked)}
                                                                 className="form-checkbox h-4 w-4 text-blue-600 transition duration-150 ease-in-out"
                                                             />
                                                         </td>
                                                         <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-800">{payment.date}</td>
                                                         <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-800">₱{payment.amount.toLocaleString()}</td>
-                                                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-800">{payment.paymentType || 'N/A'}</td>
+                                                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-800">{payment.paymentType || 'N/A'}</td> {/* Display payment type */}
                                                         <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-800">{payment.description}</td>
                                                     </tr>
                                                 ))}
@@ -2316,6 +2693,7 @@
                                 </div>
                             </div>
 
+                            {/* Net Collectibles */}
                             <div className="flex justify-between items-center bg-blue-100 p-4 rounded-md border border-blue-200">
                                 <p className="text-lg font-bold text-blue-800">Net Collectibles:</p>
                                 <p className="text-2xl font-extrabold text-blue-800">₱{netCollectibles.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
@@ -2333,7 +2711,7 @@
                                     type="button"
                                     onClick={handleGenerateReport}
                                     className="px-5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-                                    disabled={!selectedProject}
+                                    disabled={!selectedProject || selectedPartialPayments.length === 0}
                                 >
                                     Generate Billing Report
                                 </button>
@@ -2343,22 +2721,27 @@
                 );
             };
 
+            // New component for creating expense report form
             const CreateExpenseReportForm = ({ setView, setGeneratedExpenseReportData, isAdminLoggedIn }) => {
                 const { db, userId, isAuthReady } = useFirebase();
                 const [projects, setProjects] = useState([]);
                 const [selectedProjectId, setSelectedProjectId] = useState('');
                 const [selectedProject, setSelectedProject] = useState(null);
                 const [projectExpenses, setProjectExpenses] = useState([]);
-                const [selectedExpenses, setSelectedExpenses] = useState([]);
+                const [selectedExpenses, setSelectedExpenses] = useState([]); // New state for selected expenses
                 const [message, setMessage] = useState({ type: '', text: '' });
-                const { showToast } = useContext(ToastContext);
+                const { showToast } = useContext(ToastContext); // Use ToastContext
 
                 useEffect(() => {
-                    if (!isAuthReady || !db || !userId) return;
+                    if (!isAuthReady || !db) return; // userId is not needed for public data path
 
-                    const projectsColRef = collection(db, `artifacts/${__app_id}/users/${userId}/projects`);
+                    // Changed to public data path
+                    const projectsColRef = collection(db, `artifacts/${__app_id}/public/data/projects`);
                     const unsubscribe = onSnapshot(projectsColRef, (snapshot) => {
-                        const projectsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        const projectsData = snapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data()
+                        }));
                         setProjects(projectsData);
                     }, (err) => {
                         console.error("Error fetching projects for expense report form:", err);
@@ -2367,7 +2750,7 @@
                     });
 
                     return () => unsubscribe();
-                }, [db, userId, isAuthReady, showToast]);
+                }, [db, isAuthReady, showToast]); // Removed userId from dependency array
 
                 const handleProjectChange = (e) => {
                     const projectId = e.target.value;
@@ -2375,8 +2758,8 @@
                     setSelectedProjectId(projectId);
                     setSelectedProject(project);
                     setProjectExpenses(project ? project.expenses || [] : []);
-                    setSelectedExpenses([]);
-                    setMessage({ type: '', text: '' });
+                    setSelectedExpenses([]); // Reset selected expenses when project changes
+                    setMessage({ type: '', text: '' }); // Clear messages on project change
                 };
 
                 const handleExpenseSelection = (expense, isChecked) => {
@@ -2401,14 +2784,24 @@
 
                     const newExpenseReportData = {
                         project: selectedProject,
-                        expenses: selectedExpenses,
+                        expenses: selectedExpenses, // Only include selected expenses
                         reportDate: new Date().toISOString().slice(0, 10),
                     };
 
+                    // DO NOT save to Firestore here. Just pass the data.
                     setGeneratedExpenseReportData(newExpenseReportData);
                     setView('viewExpenseReport');
                     showToast('Expense report generated!', 'success');
                 };
+
+                if (!isAdminLoggedIn) {
+                    return (
+                        <div className="bg-white p-6 rounded-lg shadow-md max-w-2xl mx-auto text-center py-10">
+                            <h2 className="text-2xl font-bold mb-4 text-gray-900">Access Denied</h2>
+                            <p className="text-gray-600">You need admin privileges to create expense reports.</p>
+                        </div>
+                    );
+                }
 
                 return (
                     <div className="bg-white p-6 rounded-lg shadow-md max-w-2xl mx-auto">
@@ -2503,29 +2896,32 @@
                 );
             };
 
+            // New component for displaying the generated expense report
             const ExpenseReportDisplay = ({ reportData, setView, setGeneratedExpenseReportData }) => {
                 const { db, userId, isAuthReady } = useFirebase();
                 const [template, setTemplate] = useState(null);
                 const [loadingTemplate, setLoadingTemplate] = useState(true);
-                const { showToast } = useContext(ToastContext);
+                const { showToast } = useContext(ToastContext); // Use ToastContext
 
                 useEffect(() => {
-                    if (!isAuthReady || !db || !userId) return;
+                    if (!isAuthReady || !db) return; // userId is not needed for public data path
 
-                    const templateDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/templates`, 'billingTemplate');
+                    // Changed to public data path
+                    const templateDocRef = doc(db, `artifacts/${__app_id}/public/data/templates`, 'billingTemplate');
                     const fetchTemplate = async () => {
                         try {
                             const docSnap = await getDoc(templateDocRef);
                             if (docSnap.exists()) {
                                 setTemplate(docSnap.data());
                             } else {
+                                // Fallback to default if no template saved
                                 setTemplate({
                                     companyName: "D.L.Verano's Electrical Supply and Services",
                                     address: "72 BULELAK ST. MALANDAY, MARIKINA CITY",
                                     email: "dl_verano@yahoo.com",
                                     signatoryName: "ENGR. DANTE L. VERANO",
                                     signatoryTitle: "General Manager",
-                                    logoUrl: "",
+                                    logoUrl: "", // Default logo to empty
                                 });
                             }
                         } catch (err) {
@@ -2537,7 +2933,7 @@
                                 email: "dl_verano@yahoo.com",
                                 signatoryName: "ENGR. DANTE L. VERANO",
                                 signatoryTitle: "General Manager",
-                                logoUrl: "",
+                                logoUrl: "", // Default logo to empty
                             });
                         } finally {
                             setLoadingTemplate(false);
@@ -2545,7 +2941,7 @@
                     };
 
                     fetchTemplate();
-                }, [db, userId, isAuthReady, showToast]);
+                }, [db, isAuthReady, showToast]); // Removed userId from dependency array
 
                 if (loadingTemplate) {
                     return <div className="text-center py-8">Loading report template...</div>;
@@ -2553,18 +2949,22 @@
 
                 const { project, expenses, reportDate } = reportData;
                 const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+
+                // Group expenses by type for display
                 const groupedExpenses = expenses.reduce((acc, expense) => {
-                    const type = expense.expenseType || 'Other Expenses';
+                    const type = expense.expenseType || 'Other Expenses'; // Default to 'Other Expenses' if type is missing
                     if (!acc[type]) {
                         acc[type] = [];
                     }
                     acc[type].push(expense);
                     return acc;
                 }, {});
+
+                // Define a preferred order for expense types
                 const expenseTypesOrder = ['Material Expenses', 'Payroll Expenses', 'Other Expenses'];
 
                 const handleSaveReport = async () => {
-                    if (!db || !userId) {
+                    if (!db) { // userId is not needed for public data path
                         showToast('Firebase not initialized. Cannot save report.', 'error');
                         return;
                     }
@@ -2575,19 +2975,23 @@
                         delete reportToSave.id;
 
                         if (reportId) {
-                            const reportDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/reports`, reportId);
+                            // Update existing report
+                            // Changed to public data path
+                            const reportDocRef = doc(db, `artifacts/${__app_id}/public/data/reports`, reportId);
                             await updateDoc(reportDocRef, { reportData: JSON.stringify(reportToSave) });
                             showToast('Report updated in logs!', 'success');
                         } else {
-                            const reportsColRef = collection(db, `artifacts/${__app_id}/users/${userId}/reports`);
+                            // Add new report
+                            // Changed to public data path
+                            const reportsColRef = collection(db, `artifacts/${__app_id}/public/data/reports`);
                             const newReportDocRef = await addDoc(reportsColRef, {
                                 type: 'expense',
                                 projectId: reportData.project.id,
                                 reportName: `EXPENSE REPORT - ${reportData.project.projectName} - ${reportData.reportDate}`,
-                                reportData: JSON.stringify(reportToSave),
+                                reportData: JSON.stringify(reportToSave), // Store as JSON string
                                 createdAt: new Date().toISOString(),
                             });
-                            setGeneratedExpenseReportData(prev => ({ ...prev, id: newReportDocRef.id }));
+                            setGeneratedExpenseReportData(prev => ({ ...prev, id: newReportDocRef.id })); // Update state with new ID
                             showToast('Report saved to logs!', 'success');
                         }
                     } catch (err) {
@@ -2597,12 +3001,16 @@
                 };
 
                 const handlePrint = () => {
-                    setTimeout(() => window.print(), 100);
+                    console.log("Attempting to print expense report...");
+                    setTimeout(() => {
+                        window.print();
+                    }, 100);
                 };
 
 
                 return (
                     <div className="bg-white p-8 rounded-lg shadow-md max-w-4xl mx-auto my-8 print:shadow-none print:p-0 print-area">
+                        {/* Report Header */}
                         <div className="text-center mb-10 pb-4 relative">
                             {template?.logoUrl && (
                                 <img
@@ -2619,6 +3027,7 @@
                             </div>
                         </div>
 
+                        {/* Report Title and Project Info */}
                         <div className="mb-8 text-lg">
                             <h2 className="text-3xl font-bold text-center mb-6 text-gray-900">Project Expenses Report</h2>
                             <div className="grid grid-cols-2 gap-x-4 gap-y-2 mb-6">
@@ -2628,6 +3037,7 @@
                             </div>
                         </div>
 
+                        {/* Expenses Table */}
                         <div className="mb-8 border-t border-gray-300 pt-6">
                             <h3 className="text-xl font-bold mb-4 text-gray-900">Detailed Expenses</h3>
                             {expenses.length > 0 ? (
@@ -2635,7 +3045,7 @@
                                     {expenseTypesOrder.map(type => {
                                         const expensesOfType = groupedExpenses[type] || [];
                                         const subtotalOfType = expensesOfType.reduce((sum, exp) => sum + exp.amount, 0);
-                                        if (expensesOfType.length === 0) return null;
+                                        if (expensesOfType.length === 0) return null; // Don't render section if no expenses of this type
 
                                         return (
                                             <div key={type}>
@@ -2674,11 +3084,13 @@
                             )}
                         </div>
 
+                        {/* Total Expenses */}
                         <div className="flex justify-end items-center mb-12 border-t-2 border-b-2 border-gray-900 py-2">
                             <span className="text-xl font-bold mr-4">TOTAL EXPENSES:</span>
                             <span className="text-2xl font-extrabold text-red-700">₱{totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
 
+                        {/* Control Buttons */}
                         <div className="mt-12 text-center print:hidden">
                             <button
                                 onClick={() => setView('createExpenseReport')}
@@ -2703,6 +3115,7 @@
                 );
             };
 
+            // New Logs Component
             const Logs = ({ setView, setGeneratedReportData, setGeneratedExpenseReportData, isAdminLoggedIn }) => {
                 const { db, userId, isAuthReady } = useFirebase();
                 const [reports, setReports] = useState([]);
@@ -2713,15 +3126,17 @@
                 const { showToast } = useContext(ToastContext);
 
                 useEffect(() => {
-                    if (!isAuthReady || !db || !userId) return;
+                    if (!isAuthReady || !db) return; // userId is not needed for public data path
 
-                    const reportsColRef = collection(db, `artifacts/${__app_id}/users/${userId}/reports`);
+                    // Changed to public data path
+                    const reportsColRef = collection(db, `artifacts/${__app_id}/public/data/reports`);
                     const unsubscribe = onSnapshot(reportsColRef, (snapshot) => {
                         const reportsData = snapshot.docs.map(doc => ({
                             id: doc.id,
                             ...doc.data(),
-                            reportData: JSON.parse(doc.data().reportData)
+                            reportData: JSON.parse(doc.data().reportData) // Parse the JSON string back to object
                         }));
+                        // Sort by createdAt descending
                         reportsData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
                         setReports(reportsData);
                         setLoading(false);
@@ -2733,7 +3148,7 @@
                     });
 
                     return () => unsubscribe();
-                }, [db, userId, isAuthReady, showToast]);
+                }, [db, isAuthReady, showToast]); // Removed userId from dependency array
 
                 const handleViewReport = (report) => {
                     if (report.type === 'billing') {
@@ -2763,9 +3178,10 @@
                 };
 
                 const confirmDelete = async () => {
-                    if (!db || !userId || !reportToDelete) return;
+                    if (!db || !reportToDelete) return; // userId is not needed for public data path
                     try {
-                        const reportDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/reports`, reportToDelete.id);
+                        // Changed to public data path
+                        const reportDocRef = doc(db, `artifacts/${__app_id}/public/data/reports`, reportToDelete.id);
                         await deleteDoc(reportDocRef);
                         setShowDeleteConfirm(false);
                         setReportToDelete(null);
@@ -2781,8 +3197,18 @@
                     setReportToDelete(null);
                 };
 
+                if (!isAdminLoggedIn) {
+                    return (
+                        <div className="bg-white p-6 rounded-lg shadow-md max-w-2xl mx-auto text-center py-10">
+                            <h2 className="text-2xl font-bold mb-4 text-gray-900">Access Denied</h2>
+                            <p className="text-gray-600">You need admin privileges to view logs.</p>
+                        </div>
+                    );
+                }
+
                 if (loading) return <div className="text-center py-8">Loading logs...</div>;
                 if (error) return <div className="text-center py-8 text-red-600">{error}</div>;
+
 
                 return (
                     <div className="bg-white p-6 rounded-lg shadow-md">
@@ -2845,88 +3271,6 @@
                     </div>
                 );
             };
-            
-            // --- New User Management Component ---
-            const UserManagement = ({ currentUserId }) => {
-                const { db } = useFirebase();
-                const [users, setUsers] = useState([]);
-                const [loading, setLoading] = useState(true);
-                const { showToast } = useContext(ToastContext);
-
-                useEffect(() => {
-                    if (!db) return;
-                    const usersColRef = collection(db, `artifacts/${__app_id}/users`);
-                    const unsubscribe = onSnapshot(usersColRef, (snapshot) => {
-                        const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                        setUsers(usersData);
-                        setLoading(false);
-                    }, (err) => {
-                        console.error("Error fetching users:", err);
-                        showToast("Failed to load users.", "error");
-                        setLoading(false);
-                    });
-
-                    return () => unsubscribe();
-                }, [db]);
-
-                const handleRoleChange = async (targetUserId, newRole) => {
-                    if (targetUserId === currentUserId) {
-                        showToast("You cannot change your own role.", "error");
-                        return;
-                    }
-                    try {
-                        const userDocRef = doc(db, `artifacts/${__app_id}/users`, targetUserId);
-                        await updateDoc(userDocRef, { role: newRole });
-                        showToast(`User role updated to ${newRole}.`, 'success');
-                    } catch (error) {
-                        console.error("Error updating user role:", error);
-                        showToast("Failed to update user role.", "error");
-                    }
-                };
-
-                if (loading) return <div className="text-center py-8">Loading user data...</div>;
-
-                return (
-                    <div className="bg-white p-6 rounded-lg shadow-md">
-                        <h2 className="text-2xl font-bold mb-6 text-gray-900 border-b pb-3">User Management</h2>
-                        <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User ID</th>
-                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                                        <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {users.map(user => (
-                                        <tr key={user.id}>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">{user.id}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.role === 'admin' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                                                    {user.role}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                                {user.id !== currentUserId && (
-                                                    <>
-                                                        {user.role !== 'admin' && (
-                                                            <button onClick={() => handleRoleChange(user.id, 'admin')} className="text-green-600 hover:text-green-900 mr-4">Make Admin</button>
-                                                        )}
-                                                        {user.role === 'admin' && (
-                                                            <button onClick={() => handleRoleChange(user.id, 'user')} className="text-yellow-600 hover:text-yellow-900">Make User</button>
-                                                        )}
-                                                    </>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                );
-            };
 
 
             // --- Main App Component ---
@@ -2934,21 +3278,28 @@
                 const [view, setView] = useState('dashboard');
                 const [selectedProjectId, setSelectedProjectId] = useState(null);
                 const [generatedReportData, setGeneratedReportData] = useState(null);
-                const [generatedExpenseReportData, setGeneratedExpenseReportData] = useState(null);
+                const [generatedExpenseReportData, setGeneratedExpenseReportData] = useState(null); // New state for expense report
                 const [firebaseApp, setFirebaseApp] = useState(null);
                 const [db, setDb] = useState(null);
                 const [auth, setAuth] = useState(null);
-                const [userId, setUserId] = useState(null);
+                const [userId, setUserId] = useState(null); // Keep userId for auth state, but not for data paths
                 const [isAuthReady, setIsAuthReady] = useState(false);
                 const [loading, setLoading] = useState(true);
                 const [error, setError] = useState(null);
-                const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
-                const [showAdminLoginModal, setShowAdminLoginModal] = useState(false);
-                const { showToast } = useContext(ToastContext) || {}; // Added fallback for context
+                const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false); // New state for admin access
+                const [showAdminLoginModal, setShowAdminLoginModal] = useState(false); // New state for admin login modal
 
                 useEffect(() => {
                     const initializeFirebase = async () => {
                         try {
+                            const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-app-id'; // Access from window
+                            const firebaseConfig = typeof window.__firebase_config !== 'undefined' ? window.__firebase_config : {}; // Access from window
+                            const initialAuthToken = typeof window.__initial_auth_token !== 'undefined' ? window.__initial_auth_token : null; // Access from window
+
+                            if (Object.keys(firebaseConfig).length === 0) {
+                                throw new Error("Firebase configuration is missing. Please ensure __firebase_config is set.");
+                            }
+
                             const app = initializeApp(firebaseConfig);
                             const firestore = getFirestore(app);
                             const authentication = getAuth(app);
@@ -2957,30 +3308,31 @@
                             setDb(firestore);
                             setAuth(authentication);
 
-                            const unsubscribe = onAuthStateChanged(authentication, (user) => {
+                            const unsubscribe = onAuthStateChanged(authentication, async (user) => {
                                 if (user) {
                                     setUserId(user.uid);
-                                    // Setup user profile listener
-                                    const userDocRef = doc(firestore, `artifacts/${__app_id}/users`, user.uid);
-                                    const unsubscribeProfile = onSnapshot(userDocRef, (docSnap) => {
-                                        if (docSnap.exists()) {
-                                            const userData = docSnap.data();
-                                            setIsAdminLoggedIn(userData.role === 'admin');
+                                    // Check user's role from Firestore (still uses public/data/userRoles)
+                                    const userRoleDocRef = doc(firestore, `artifacts/${appId}/public/data/userRoles`, user.uid);
+                                    try {
+                                        const docSnap = await getDoc(userRoleDocRef);
+                                        if (docSnap.exists() && docSnap.data().role === 'admin') {
+                                            setIsAdminLoggedIn(true);
                                         } else {
-                                            // Create a new user profile if it doesn't exist
-                                            setDoc(userDocRef, { uid: user.uid, role: 'user', createdAt: new Date().toISOString() });
                                             setIsAdminLoggedIn(false);
                                         }
-                                    });
-                                    // We need to return this unsubscribe function to clean up the listener
-                                    // but onAuthStateChanged expects only one unsubscribe.
-                                    // For simplicity here, we don't unsubscribe from profile changes on logout,
-                                    // as the app will re-auth and set up a new listener.
+                                    } catch (roleError) {
+                                        console.error("Error fetching user role:", roleError);
+                                        setIsAdminLoggedIn(false); // Default to not admin on error
+                                    }
                                 } else {
-                                    signInAnonymously(authentication).catch(authError => {
-                                        console.error("Anonymous sign-in failed:", authError);
-                                        setError(`Authentication failed: ${authError.message}`);
-                                    });
+                                    // Sign in anonymously if no user and no custom token
+                                    if (initialAuthToken) {
+                                        await signInWithCustomToken(authentication, initialAuthToken);
+                                    } else {
+                                        await signInAnonymously(authentication);
+                                    }
+                                    setUserId(null); // Clear userId on logout/anonymous
+                                    setIsAdminLoggedIn(false); // Not admin if no user or anonymous
                                 }
                                 setIsAuthReady(true);
                                 setLoading(false);
@@ -2997,39 +3349,15 @@
                     initializeFirebase();
                 }, []);
 
-                const handleAdminLoginSuccess = async () => {
-                    if (!db || !userId) {
-                        showToast("User not authenticated. Cannot grant admin rights.", "error");
-                        return;
-                    }
-                    const userDocRef = doc(db, `artifacts/${__app_id}/users`, userId);
-                    try {
-                        await updateDoc(userDocRef, { role: 'admin' });
-                        setIsAdminLoggedIn(true);
-                        setShowAdminLoginModal(false);
-                    } catch (error) {
-                        console.error("Failed to update user role:", error);
-                        showToast("Could not grant admin rights. Please try again.", "error");
-                    }
-                };
-                
-                const handleAdminLogout = async () => {
-                     if (!db || !userId) {
-                        showToast("User not authenticated. Cannot logout.", "error");
-                        return;
-                    }
-                    const userDocRef = doc(db, `artifacts/${__app_id}/users`, userId);
-                    try {
-                        await updateDoc(userDocRef, { role: 'user' });
-                        setIsAdminLoggedIn(false);
-                        setView('dashboard');
-                        showToast("You are no longer an admin.", 'success');
-                    } catch (error) {
-                        console.error("Failed to update user role:", error);
-                        showToast("Could not logout from admin. Please try again.", "error");
-                    }
+                const handleAdminLoginSuccess = () => {
+                    setIsAdminLoggedIn(true);
+                    setShowAdminLoginModal(false);
                 };
 
+                const handleAdminLogout = () => {
+                    setIsAdminLoggedIn(false);
+                    setView('dashboard'); // Redirect to dashboard on logout
+                };
 
                 if (loading) {
                     return (
@@ -3054,41 +3382,23 @@
                     );
                 }
 
-                const renderView = () => {
-                    const adminViews = ['projects', 'newProject', 'editProject', 'templateEditor', 'createBilling', 'createExpenseReport', 'logs', 'userManagement'];
-                    if (adminViews.includes(view) && !isAdminLoggedIn) {
-                        return (
-                            <div className="bg-white p-6 rounded-lg shadow-md text-center">
-                                <h2 className="text-2xl font-bold text-red-600 mb-4">Access Denied</h2>
-                                <p>You must be an admin to access this page.</p>
-                            </div>
-                        );
-                    }
-                    
-                    switch (view) {
-                        case 'dashboard': return <Dashboard setView={setView} setSelectedProjectId={setSelectedProjectId} isAdminLoggedIn={isAdminLoggedIn} />;
-                        case 'projects': return <Projects setView={setView} setSelectedProjectId={setSelectedProjectId} isAdminLoggedIn={isAdminLoggedIn} />;
-                        case 'newProject': return <ProjectForm setView={setView} setSelectedProjectId={setSelectedProjectId} />;
-                        case 'editProject': return selectedProjectId && <ProjectForm projectId={selectedProjectId} setView={setView} setSelectedProjectId={setSelectedProjectId} />;
-                        case 'projectDetail': return selectedProjectId && <ProjectDetail projectId={selectedProjectId} setView={setView} isAdminLoggedIn={isAdminLoggedIn} />;
-                        case 'templateEditor': return <TemplateEditor setView={setView} setGeneratedReportData={setGeneratedReportData} isAdminLoggedIn={isAdminLoggedIn} />;
-                        case 'createBilling': return <CreateBillingForm setView={setView} setGeneratedReportData={setGeneratedReportData} initialReportData={generatedReportData} isAdminLoggedIn={isAdminLoggedIn} />;
-                        case 'viewReport': return generatedReportData && <BillingReportDisplay reportData={generatedReportData} setView={setView} setGeneratedReportData={setGeneratedReportData} />;
-                        case 'createExpenseReport': return <CreateExpenseReportForm setView={setView} setGeneratedExpenseReportData={setGeneratedExpenseReportData} isAdminLoggedIn={isAdminLoggedIn} />;
-                        case 'viewExpenseReport': return generatedExpenseReportData && <ExpenseReportDisplay reportData={generatedExpenseReportData} setView={setView} setGeneratedExpenseReportData={setGeneratedExpenseReportData} />;
-                        case 'logs': return <Logs setView={setView} setGeneratedReportData={setGeneratedReportData} setGeneratedExpenseReportData={setGeneratedExpenseReportData} isAdminLoggedIn={isAdminLoggedIn} />;
-                        case 'userManagement': return <UserManagement currentUserId={userId} />;
-                        default: return <Dashboard setView={setView} setSelectedProjectId={setSelectedProjectId} isAdminLoggedIn={isAdminLoggedIn} />;
-                    }
-                };
-
                 return (
                     <FirebaseContext.Provider value={{ db, auth, userId, isAuthReady, firebaseApp }}>
-                        <ToastProvider>
+                        <ToastProvider> {/* Wrap the entire app with ToastProvider */}
                             <div className="min-h-screen bg-gray-100 font-sans antialiased text-gray-800">
-                                <Header setView={setView} isAdminLoggedIn={isAdminLoggedIn} onAdminLogout={handleAdminLogout} onAdminLoginClick={() => setShowAdminLoginModal(true)} userId={userId} />
+                                <Header setView={setView} isAdminLoggedIn={isAdminLoggedIn} onAdminLogout={handleAdminLogout} onAdminLoginClick={() => setShowAdminLoginModal(true)} />
                                 <main className="container mx-auto p-4 sm:p-6 lg:p-8">
-                                    {renderView()}
+                                    {view === 'dashboard' && <Dashboard setView={setView} setSelectedProjectId={setSelectedProjectId} isAdminLoggedIn={isAdminLoggedIn} />}
+                                    {view === 'projects' && <Projects setView={setView} setSelectedProjectId={setSelectedProjectId} isAdminLoggedIn={isAdminLoggedIn} />}
+                                    {view === 'newProject' && <ProjectForm setView={setView} setSelectedProjectId={setSelectedProjectId} />}
+                                    {view === 'editProject' && selectedProjectId && <ProjectForm projectId={selectedProjectId} setView={setView} setSelectedProjectId={setSelectedProjectId} />}
+                                    {view === 'projectDetail' && selectedProjectId && <ProjectDetail projectId={selectedProjectId} setView={setView} isAdminLoggedIn={isAdminLoggedIn} />}
+                                    {view === 'templateEditor' && <TemplateEditor setView={setView} setGeneratedReportData={setGeneratedReportData} isAdminLoggedIn={isAdminLoggedIn} />}
+                                    {view === 'createBilling' && <CreateBillingForm setView={setView} setGeneratedReportData={setGeneratedReportData} initialReportData={generatedReportData} isAdminLoggedIn={isAdminLoggedIn} />}
+                                    {view === 'viewReport' && generatedReportData && <BillingReportDisplay reportData={generatedReportData} setView={setView} setGeneratedReportData={setGeneratedReportData} />}
+                                    {view === 'createExpenseReport' && <CreateExpenseReportForm setView={setView} setGeneratedExpenseReportData={setGeneratedExpenseReportData} isAdminLoggedIn={isAdminLoggedIn} />}
+                                    {view === 'viewExpenseReport' && generatedExpenseReportData && <ExpenseReportDisplay reportData={generatedExpenseReportData} setView={setView} setGeneratedExpenseReportData={setGeneratedExpenseReportData} />}
+                                    {view === 'logs' && <Logs setView={setView} setGeneratedReportData={setGeneratedReportData} setGeneratedExpenseReportData={setGeneratedExpenseReportData} isAdminLoggedIn={isAdminLoggedIn} />}
                                 </main>
                                 <footer className="bg-gray-800 text-white py-4 mt-8 rounded-t-lg shadow-lg print:hidden">
                                     <div className="container mx-auto text-center text-sm opacity-80">
@@ -3096,7 +3406,7 @@
                                     </div>
                                 </footer>
                             </div>
-                             {showAdminLoginModal && (
+                            {showAdminLoginModal && (
                                 <AdminLoginModal
                                     onClose={() => setShowAdminLoginModal(false)}
                                     onLoginSuccess={handleAdminLoginSuccess}
@@ -3107,15 +3417,10 @@
                 );
             };
 
-            const AppWrapper = () => (
-                <ToastProvider>
-                    <App />
-                </ToastProvider>
-            );
-
+            // Render the App component into the 'root' div
             const container = document.getElementById('root');
             const root = ReactDOM.createRoot(container);
-            root.render(<AppWrapper />);
+            root.render(<App />);
         };
     </script>
 </body>
