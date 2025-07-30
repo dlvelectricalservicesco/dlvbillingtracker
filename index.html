@@ -73,7 +73,6 @@
     <div id="root"></div>
 
     <!-- React and ReactDOM CDNs -->
-    <!-- Switched to cdnjs for better CORS compatibility -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js" crossorigin></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -81,15 +80,13 @@
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        // Reverted Firebase Auth imports to anonymous/custom token
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        // Import Firebase Storage modules - NOT USED IN THIS VERSION FOR UPLOAD
-        // import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
-
 
         // Define Firebase config globally for the React script to access
         // API Key is intentionally left empty; Canvas will inject it at runtime.
-        window.__firebase_config = { // Changed to window.__firebase_config
+        window.__firebase_config = {
             apiKey: "AIzaSyD7LhkerFn3EAMRDIE0Da-ko2Cw7lKg6OQ",
             authDomain: "dlvbilling-448fc.firebaseapp.com",
             projectId: "dlvbilling-448fc",
@@ -100,8 +97,8 @@
         };
 
         // Define __app_id and __initial_auth_token globally
-        window.__app_id = 'dlvbillingtracker'; // Use your actual app ID
-        window.__initial_auth_token = null; // Set to null or your actual token if available
+        window.__app_id = 'dlvbillingtracker';
+        window.__initial_auth_token = null; // Canvas will provide this if available
 
         // Export Firebase functions to the window object so React script can use them
         window.firebase = {
@@ -110,6 +107,7 @@
             signInAnonymously,
             signInWithCustomToken,
             onAuthStateChanged,
+            signOut,
             getFirestore,
             collection,
             addDoc,
@@ -121,35 +119,20 @@
             arrayUnion,
             arrayRemove,
             deleteDoc,
-            // Storage functions are no longer directly exported for upload in this version
-            // getStorage,
-            // ref,
-            // uploadBytes,
-            // getDownloadURL
         };
     </script>
 
     <script type="text/babel">
-        // Ensure the entire React application runs only after the window is fully loaded.
-        // This helps guarantee that ReactDOM is defined by the time it's accessed.
         window.onload = function() {
-            // React and ReactDOM are now guaranteed to be available here
             const { useState, useEffect, createContext, useContext } = React;
-            const ReactDOM = window.ReactDOM; // Explicitly get ReactDOM from the window object
+            const ReactDOM = window.ReactDOM;
 
-            // Access Firebase functions and config from the global window object
             const firebaseConfig = window.__firebase_config;
             const __app_id = window.__app_id;
             const __initial_auth_token = window.__initial_auth_token;
-            const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, getFirestore, collection, addDoc, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc } = window.firebase;
-            // Removed Storage imports from here as well, since upload functionality is removed.
-            // If you later need getDownloadURL for displaying existing logos, you'd re-import it.
-            // For now, we assume logoUrl is directly stored in Firestore template.
+            const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut, getFirestore, collection, addDoc, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc } = window.firebase;
 
-            // Create a context for Firebase and user data
             const FirebaseContext = createContext(null);
-
-            // Custom hook to use Firebase context
             const useFirebase = () => useContext(FirebaseContext);
 
             // --- Toast Component ---
@@ -169,7 +152,6 @@
                 );
             };
 
-            // Create a Toast Context
             const ToastContext = createContext(null);
 
             const ToastProvider = ({ children }) => {
@@ -191,54 +173,93 @@
             };
 
 
-            // --- Admin Login Modal Component ---
-            const AdminLoginModal = ({ onClose, onLoginSuccess }) => {
+            // --- Admin Login Modal Component (Modified for per-user admin status) ---
+            const AdminLoginModal = ({ onClose, currentAdminStatus }) => {
+                const { db, userId, isAuthReady } = useFirebase();
                 const [password, setPassword] = useState('');
                 const [error, setError] = useState('');
+                const [loading, setLoading] = useState(false);
                 const { showToast } = useContext(ToastContext);
 
-                const handleLogin = () => {
-                    // For demonstration purposes, a simple hardcoded password.
-                    // In a real application, this would involve secure authentication.
-                    if (password === 'admin123') { // Replace with a secure method in production
-                        onLoginSuccess();
-                        showToast('Admin access granted!', 'success');
-                        onClose();
-                    } else {
+                const handleToggleAdminStatus = async () => {
+                    setError('');
+                    setLoading(true);
+
+                    if (password !== 'admin123') { // Hardcoded password for demonstration
                         setError('Invalid password. Please try again.');
                         showToast('Invalid password.', 'error');
+                        setLoading(false);
+                        return;
+                    }
+
+                    if (!db || !userId || !isAuthReady) {
+                        showToast('Firebase not ready or user not authenticated. Please try again.', 'error');
+                        setLoading(false);
+                        return;
+                    }
+
+                    try {
+                        // Store admin status in the user's private data
+                        const adminStatusDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/adminStatus`, 'userAdmin');
+                        const newStatus = !currentAdminStatus; // Toggle the status
+
+                        await setDoc(adminStatusDocRef, { isEnabled: newStatus }, { merge: true });
+
+                        if (newStatus) {
+                            showToast('Admin access UNLOCKED for your account!', 'success');
+                        } else {
+                            showToast('Admin access LOCKED for your account!', 'success');
+                        }
+                        onClose(); // Close modal after successful toggle
+                    } catch (err) {
+                        console.error("Error toggling admin status:", err);
+                        setError("Failed to toggle admin status. Please try again.");
+                        showToast("Failed to toggle admin status.", "error");
+                    } finally {
+                        setLoading(false);
                     }
                 };
 
                 return (
                     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50">
                         <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm transform transition-all scale-100 opacity-100">
-                            <h3 className="text-xl font-bold mb-4 text-gray-900 border-b pb-2">Admin Login</h3>
+                            <h3 className="text-xl font-bold mb-4 text-gray-900 border-b pb-2">Admin Access Control</h3>
+                            <div className="text-center mb-4">
+                                <p className="text-lg font-semibold">Current Status:</p>
+                                <p className={`text-2xl font-bold ${currentAdminStatus ? 'text-green-600' : 'text-red-600'}`}>
+                                    {currentAdminStatus ? 'UNLOCKED' : 'LOCKED'}
+                                </p>
+                            </div>
                             <div className="space-y-4">
                                 <div>
-                                    <label htmlFor="adminPassword" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                                    <label htmlFor="adminPassword" className="block text-sm font-medium text-gray-700 mb-1">Password to Toggle</label>
                                     <input
                                         type="password"
                                         id="adminPassword"
                                         value={password}
                                         onChange={(e) => { setPassword(e.target.value); setError(''); }}
                                         className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                                        onKeyPress={(e) => { if (e.key === 'Enter') handleLogin(); }}
+                                        onKeyPress={(e) => { if (e.key === 'Enter') handleToggleAdminStatus(); }}
+                                        disabled={loading}
                                     />
                                     {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
                                 </div>
                                 <div className="flex justify-end space-x-3">
                                     <button
+                                        type="button"
                                         onClick={onClose}
                                         className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50"
+                                        disabled={loading}
                                     >
                                         Cancel
                                     </button>
                                     <button
-                                        onClick={handleLogin}
-                                        className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+                                        type="button"
+                                        onClick={handleToggleAdminStatus}
+                                        className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        disabled={loading}
                                     >
-                                        Login
+                                        {loading ? 'Toggling...' : 'Toggle Admin Status'}
                                     </button>
                                 </div>
                             </div>
@@ -250,26 +271,26 @@
 
             // --- Component Definitions (Ordered from child to parent where possible) ---
 
-            const Header = ({ setView, isAdminLoggedIn, onAdminLogout, onAdminLoginClick, userId }) => {
+            const Header = ({ setView, isAdminLoggedIn, onLogout, onAdminLoginClick, userId }) => {
                 return (
                     <header className="bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-lg rounded-b-lg print:hidden">
                         <div className="container mx-auto p-4 flex flex-col sm:flex-row justify-between items-center">
                             <h1 className="text-3xl font-bold mb-4 sm:mb-0">DLV Electrical Services Co.</h1>
-                            {userId && ( // Display userId if available
+                            {userId && (
                                 <div className="text-sm opacity-75 mt-2 sm:mt-0">
                                     User ID: <span className="font-mono break-all">{userId}</span>
                                 </div>
                             )}
-                            {!isAdminLoggedIn && (
-                                <div className="mt-2 sm:mt-0">
-                                    <button
-                                        onClick={onAdminLoginClick}
-                                        className="px-4 py-2 rounded-lg bg-gray-700 text-white hover:bg-gray-800 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-gray-600 focus:ring-opacity-50 text-sm sm:text-base font-medium"
-                                    >
-                                        Admin Login
-                                    </button>
-                                </div>
-                            )}
+
+                            {/* Admin Access Toggle Button */}
+                            <div className="mt-2 sm:mt-0">
+                                <button
+                                    onClick={onAdminLoginClick}
+                                    className={`px-4 py-2 rounded-lg ${isAdminLoggedIn ? 'bg-gray-500 hover:bg-gray-600' : 'bg-gray-700 hover:bg-gray-800'} text-white transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 text-sm sm:text-base font-medium`}
+                                >
+                                    Admin {isAdminLoggedIn ? 'UNLOCKED' : 'LOCKED'}
+                                </button>
+                            </div>
                         </div>
                         {/* Navigation Bar */}
                         <nav className="bg-blue-700 py-3 shadow-md">
@@ -306,21 +327,20 @@
                                         >
                                             Create Expenses Report
                                         </button>
-                                        {/* New Logs Button */}
                                         <button
                                             onClick={() => setView('logs')}
                                             className="px-4 py-2 rounded-lg bg-orange-600 text-white hover:bg-orange-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-opacity-50 text-sm sm:text-base font-medium"
                                         >
                                             Logs
                                         </button>
-                                        <button
-                                            onClick={onAdminLogout}
-                                            className="px-4 py-2 rounded-lg bg-gray-500 text-white hover:bg-gray-600 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 text-sm sm:text-base font-medium"
-                                        >
-                                            Admin Logout
-                                        </button>
                                     </>
                                 )}
+                                <button
+                                    onClick={onLogout}
+                                    className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 text-sm sm:text-base font-medium"
+                                >
+                                    Logout
+                                </button>
                             </div>
                         </nav>
                     </header>
@@ -345,12 +365,14 @@
                             <p className="text-gray-700 mb-6">{message}</p>
                             <div className="flex justify-end space-x-3">
                                 <button
+                                    type="button"
                                     onClick={onCancel}
                                     className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50"
                                 >
                                     Cancel
                                 </button>
                                 <button
+                                    type="button"
                                     onClick={onConfirm}
                                     className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50"
                                 >
@@ -1740,7 +1762,7 @@
                                 {templateData.logoUrl && (
                                     <div className="mt-2">
                                         <p className="text-sm text-gray-600 mb-1">Preview:</p>
-                                        <img src={templateData.logoUrl} alt="Logo Preview" className="max-h-24 object-contain rounded-md shadow-sm border border-gray-200" onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/100x50/cccccc/ffffff?text=Image+Error'; }} />
+                                        <img src={templateData.logoUrl} alt="Company Logo Preview" className="max-h-24 object-contain rounded-md shadow-sm border border-gray-200" onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/100x50/cccccc/ffffff?text=Image+Error'; }} />
                                     </div>
                                 )}
                             </div>
@@ -2723,7 +2745,7 @@
                                     type="button"
                                     onClick={handleGenerateReport}
                                     className="px-5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-                                    disabled={!selectedProject || selectedExpenses.length === 0}
+                                    disabled={!selectedProject || selectedPartialPayments.length === 0}
                                 >
                                     Generate Billing Report
                                 </button>
@@ -3294,7 +3316,7 @@
                 const [view, setView] = useState('dashboard');
                 const [selectedProjectId, setSelectedProjectId] = useState(null);
                 const [generatedReportData, setGeneratedReportData] = useState(null);
-                const [generatedExpenseReportData, setGeneratedExpenseReportData] = useState(null); // New state for expense report
+                const [generatedExpenseReportData, setGeneratedExpenseReportData] = useState(null);
                 const [firebaseApp, setFirebaseApp] = useState(null);
                 const [db, setDb] = useState(null);
                 const [auth, setAuth] = useState(null);
@@ -3302,15 +3324,15 @@
                 const [isAuthReady, setIsAuthReady] = useState(false);
                 const [loading, setLoading] = useState(true);
                 const [error, setError] = useState(null);
-                const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false); // New state for admin access
-                const [showAdminLoginModal, setShowAdminLoginModal] = useState(false); // New state for admin login modal
+                const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false); // Per-user admin status
+                const [showAdminLoginModal, setShowAdminLoginModal] = useState(false);
 
                 useEffect(() => {
                     const initializeFirebase = async () => {
                         try {
-                            const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-app-id'; // Access from window
-                            const firebaseConfig = typeof window.__firebase_config !== 'undefined' ? window.__firebase_config : {}; // Access from window
-                            const initialAuthToken = typeof window.__initial_auth_token !== 'undefined' ? window.__initial_auth_token : null; // Access from window
+                            const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-app-id';
+                            const firebaseConfig = typeof window.__firebase_config !== 'undefined' ? window.__firebase_config : {};
+                            const initialAuthToken = typeof window.__initial_auth_token !== 'undefined' ? window.__initial_auth_token : null;
 
                             if (Object.keys(firebaseConfig).length === 0) {
                                 throw new Error("Firebase configuration is missing. Please ensure __firebase_config is set.");
@@ -3324,26 +3346,54 @@
                             setDb(firestore);
                             setAuth(authentication);
 
-                            const unsubscribe = onAuthStateChanged(authentication, async (user) => {
+                            // Listen for authentication state changes and sign in
+                            const unsubscribeAuth = onAuthStateChanged(authentication, async (user) => {
+                                let currentUserId = null;
                                 if (user) {
-                                    setUserId(user.uid);
+                                    currentUserId = user.uid;
                                 } else {
                                     try {
                                         if (initialAuthToken) {
-                                            await signInWithCustomToken(authentication, initialAuthToken);
+                                            const userCredential = await signInWithCustomToken(authentication, initialAuthToken);
+                                            currentUserId = userCredential.user.uid;
                                         } else {
-                                            await signInAnonymously(authentication);
+                                            const userCredential = await signInAnonymously(authentication);
+                                            currentUserId = userCredential.user.uid;
                                         }
                                     } catch (authError) {
-                                        console.error("Firebase Auth error during sign-in:", authError);
+                                        console.error("Authentication error during initial sign-in:", authError);
                                         setError(`Authentication failed: ${authError.message}`);
+                                        setLoading(false);
+                                        return;
                                     }
                                 }
+                                setUserId(currentUserId);
                                 setIsAuthReady(true);
                                 setLoading(false);
+
+                                // Once userId is set, listen for this user's admin status
+                                if (currentUserId) {
+                                    const userAdminStatusDocRef = doc(firestore, `artifacts/${appId}/users/${currentUserId}/adminStatus`, 'userAdmin');
+                                    const unsubscribeAdmin = onSnapshot(userAdminStatusDocRef, (docSnap) => {
+                                        if (docSnap.exists()) {
+                                            setIsAdminLoggedIn(docSnap.data().isEnabled || false);
+                                        } else {
+                                            // Initialize user's admin status as locked if it doesn't exist
+                                            setDoc(userAdminStatusDocRef, { isEnabled: false }, { merge: true })
+                                                .then(() => setIsAdminLoggedIn(false))
+                                                .catch(err => console.error("Error initializing user admin status:", err));
+                                        }
+                                    }, (err) => {
+                                        console.error("Error fetching user admin status:", err);
+                                    });
+                                    return () => {
+                                        unsubscribeAuth();
+                                        unsubscribeAdmin(); // Cleanup for admin status listener
+                                    };
+                                }
                             });
 
-                            return () => unsubscribe();
+                            return () => unsubscribeAuth(); // Initial cleanup for auth listener
                         } catch (err) {
                             console.error("Failed to initialize Firebase:", err);
                             setError("Failed to initialize Firebase. Please check console for details.");
@@ -3354,14 +3404,25 @@
                     initializeFirebase();
                 }, []);
 
-                const handleAdminLoginSuccess = () => {
-                    setIsAdminLoggedIn(true);
-                    setShowAdminLoginModal(false);
-                };
+                // The handleAdminLoginSuccess is now integrated into AdminLoginModal's Firestore update.
+                // This function is still here but will be removed as it's no longer directly called.
+                // const handleAdminLoginSuccess = () => {
+                //     setIsAdminLoggedIn(true);
+                //     setShowAdminLoginModal(false);
+                // };
 
-                const handleAdminLogout = () => {
-                    setIsAdminLoggedIn(false);
-                    setView('dashboard'); // Redirect to dashboard on logout
+                const handleLogout = async () => {
+                    if (auth) {
+                        try {
+                            await signOut(auth);
+                            // After signing out, Firebase's onAuthStateChanged will trigger,
+                            // which will then sign in anonymously or with custom token,
+                            // and reset the userId and isAdminLoggedIn state.
+                            setView('dashboard');
+                        } catch (err) {
+                            console.error("Error signing out:", err);
+                        }
+                    }
                 };
 
                 if (loading) {
@@ -3389,28 +3450,27 @@
 
                 return (
                     <FirebaseContext.Provider value={{ db, auth, userId, isAuthReady, firebaseApp }}>
-                        <ToastProvider> {/* Wrap the entire app with ToastProvider */}
+                        <ToastProvider>
                             <div className="min-h-screen bg-gray-100 font-sans antialiased text-gray-800">
-                                <Header setView={setView} isAdminLoggedIn={isAdminLoggedIn} onAdminLogout={handleAdminLogout} onAdminLoginClick={() => setShowAdminLoginModal(true)} userId={userId} />
-                                {isAuthReady && !window.__initial_auth_token && (
-                                    <div className="container mx-auto mt-4 p-3 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-lg shadow-sm print:hidden">
-                                        <p className="font-semibold">Data Sync Notice:</p>
-                                        <p className="text-sm">You are currently signed in anonymously. Data entered will only be accessible from this specific browser session. For cross-device data synchronization, please ensure the application is run in an environment that provides a persistent authentication token (e.g., within the Canvas environment).</p>
-                                        <p className="text-xs mt-2">Your current anonymous User ID is: <span className="font-mono font-bold">{userId}</span></p>
-                                    </div>
-                                )}
+                                <Header
+                                    setView={setView}
+                                    isAdminLoggedIn={isAdminLoggedIn}
+                                    onLogout={handleLogout}
+                                    onAdminLoginClick={() => setShowAdminLoginModal(true)}
+                                    userId={userId}
+                                />
                                 <main className="container mx-auto p-4 sm:p-6 lg:p-8">
                                     {view === 'dashboard' && <Dashboard setView={setView} setSelectedProjectId={setSelectedProjectId} isAdminLoggedIn={isAdminLoggedIn} />}
                                     {view === 'projects' && <Projects setView={setView} setSelectedProjectId={setSelectedProjectId} isAdminLoggedIn={isAdminLoggedIn} />}
-                                    {view === 'newProject' && <ProjectForm setView={setView} setSelectedProjectId={setSelectedProjectId} />} {/* Use ProjectForm for new projects */}
-                                    {view === 'editProject' && selectedProjectId && <ProjectForm projectId={selectedProjectId} setView={setView} setSelectedProjectId={setSelectedProjectId} />} {/* Use ProjectForm for editing */}
+                                    {view === 'newProject' && <ProjectForm setView={setView} setSelectedProjectId={setSelectedProjectId} />}
+                                    {view === 'editProject' && selectedProjectId && <ProjectForm projectId={selectedProjectId} setView={setView} setSelectedProjectId={setSelectedProjectId} />}
                                     {view === 'projectDetail' && selectedProjectId && <ProjectDetail projectId={selectedProjectId} setView={setView} isAdminLoggedIn={isAdminLoggedIn} />}
                                     {view === 'templateEditor' && <TemplateEditor setView={setView} setGeneratedReportData={setGeneratedReportData} isAdminLoggedIn={isAdminLoggedIn} />}
                                     {view === 'createBilling' && <CreateBillingForm setView={setView} setGeneratedReportData={setGeneratedReportData} initialReportData={generatedReportData} isAdminLoggedIn={isAdminLoggedIn} />}
                                     {view === 'viewReport' && generatedReportData && <BillingReportDisplay reportData={generatedReportData} setView={setView} setGeneratedReportData={setGeneratedReportData} />}
-                                    {view === 'createExpenseReport' && <CreateExpenseReportForm setView={setView} setGeneratedExpenseReportData={setGeneratedExpenseReportData} isAdminLoggedIn={isAdminLoggedIn} />} {/* New Expense Report Form */}
-                                    {view === 'viewExpenseReport' && generatedExpenseReportData && <ExpenseReportDisplay reportData={generatedExpenseReportData} setView={setView} setGeneratedExpenseReportData={setGeneratedExpenseReportData} />} {/* New Expense Report Display */}
-                                    {view === 'logs' && <Logs setView={setView} setGeneratedReportData={setGeneratedReportData} setGeneratedExpenseReportData={setGeneratedExpenseReportData} isAdminLoggedIn={isAdminLoggedIn} />} {/* New Logs View */}
+                                    {view === 'createExpenseReport' && <CreateExpenseReportForm setView={setView} setGeneratedExpenseReportData={setGeneratedExpenseReportData} isAdminLoggedIn={isAdminLoggedIn} />}
+                                    {view === 'viewExpenseReport' && generatedExpenseReportData && <ExpenseReportDisplay reportData={generatedExpenseReportData} setView={setView} setGeneratedExpenseReportData={setGeneratedExpenseReportData} />}
+                                    {view === 'logs' && <Logs setView={setView} setGeneratedReportData={setGeneratedReportData} setGeneratedExpenseReportData={setGeneratedExpenseReportData} isAdminLoggedIn={isAdminLoggedIn} />}
                                 </main>
                                 <footer className="bg-gray-800 text-white py-4 mt-8 rounded-t-lg shadow-lg print:hidden">
                                     <div className="container mx-auto text-center text-sm opacity-80">
@@ -3418,10 +3478,10 @@
                                     </div>
                                 </footer>
                             </div>
-                            {showAdminLoginModal && (
+                            {showAdminLoginModal && userId && ( // Only show modal if userId is available
                                 <AdminLoginModal
                                     onClose={() => setShowAdminLoginModal(false)}
-                                    onLoginSuccess={handleAdminLoginSuccess}
+                                    currentAdminStatus={isAdminLoggedIn}
                                 />
                             )}
                         </ToastProvider>
@@ -3429,7 +3489,6 @@
                 );
             };
 
-            // Render the App component into the 'root' div
             const container = document.getElementById('root');
             const root = ReactDOM.createRoot(container);
             root.render(<App />);
