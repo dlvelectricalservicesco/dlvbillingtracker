@@ -36,12 +36,12 @@
                 color-adjust: exact;
             }
             /* Adjust font sizes for print if needed */
-            .text-3xl { font-size: 1.5rem; }
-            .text-2xl { font-size: 1.25rem; }
-            .text-xl { font-size: 1.125rem; }
-            .text-lg { font-size: 1rem; }
-            .text-base { font-size: 0.875rem; }
-            .text-sm { font-size: 0.75rem; }
+            .text-3xl { font-size: 1.5rem; }\r
+            .text-2xl { font-size: 1.25rem; }\r
+            .text-xl { font-size: 1.125rem; }\r
+            .text-lg { font-size: 1rem; }\r
+            .text-base { font-size: 0.875rem; }\r
+            .text-sm { font-size: 0.75rem; }\r
             .text-xs { font-size: 0.625rem; }
 
             /* Ensure elements are not cut off */
@@ -80,7 +80,6 @@
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        // Reverted Firebase Auth imports to anonymous/custom token
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
@@ -132,6 +131,14 @@
             const __initial_auth_token = window.__initial_auth_token;
             const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut, getFirestore, collection, addDoc, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc } = window.firebase;
 
+            // --- FIXED ADMIN CONFIGURATION ---
+            // IMPORTANT: Replace this with the actual UID you want to designate as admin.
+            // You can get a UID by running the app, checking the console for the userId,
+            // and then setting it here.
+            const FIXED_ADMIN_UID = "YOUR_FIXED_ADMIN_UID_HERE"; // <<<--- REPLACE THIS
+            const ADMIN_PASSWORD = "admin123"; // This password is hardcoded for demo. In production, use secure methods.
+            // ---------------------------------
+
             const FirebaseContext = createContext(null);
             const useFirebase = () => useContext(FirebaseContext);
 
@@ -173,9 +180,9 @@
             };
 
 
-            // --- Admin Login Modal Component (Modified for per-user admin status) ---
-            const AdminLoginModal = ({ onClose, currentAdminStatus }) => {
-                const { db, userId, isAuthReady } = useFirebase();
+            // --- Admin Login Modal Component (Modified for fixed admin status) ---
+            const AdminLoginModal = ({ onClose, currentAdminStatus, isCurrentUserFixedAdmin }) => {
+                const { db } = useFirebase(); // We only need db here, userId is checked in App
                 const [password, setPassword] = useState('');
                 const [error, setError] = useState('');
                 const [loading, setLoading] = useState(false);
@@ -185,30 +192,30 @@
                     setError('');
                     setLoading(true);
 
-                    if (password !== 'admin123') { // Hardcoded password for demonstration
+                    if (password !== ADMIN_PASSWORD) {
                         setError('Invalid password. Please try again.');
                         showToast('Invalid password.', 'error');
                         setLoading(false);
                         return;
                     }
 
-                    if (!db || !userId || !isAuthReady) {
-                        showToast('Firebase not ready or user not authenticated. Please try again.', 'error');
+                    if (!db) {
+                        showToast('Firebase not ready. Please try again.', 'error');
                         setLoading(false);
                         return;
                     }
 
                     try {
-                        // Store admin status in the user's private data
-                        const adminStatusDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/adminStatus`, 'userAdmin');
+                        // This action specifically targets the FIXED_ADMIN_UID's document
+                        const adminStatusDocRef = doc(db, `artifacts/${__app_id}/users/${FIXED_ADMIN_UID}/adminStatus`, 'userAdmin');
                         const newStatus = !currentAdminStatus; // Toggle the status
 
                         await setDoc(adminStatusDocRef, { isEnabled: newStatus }, { merge: true });
 
                         if (newStatus) {
-                            showToast('Admin access UNLOCKED for your account!', 'success');
+                            showToast('Admin access UNLOCKED!', 'success');
                         } else {
-                            showToast('Admin access LOCKED for your account!', 'success');
+                            showToast('Admin access LOCKED!', 'success');
                         }
                         onClose(); // Close modal after successful toggle
                     } catch (err) {
@@ -224,45 +231,53 @@
                     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50">
                         <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm transform transition-all scale-100 opacity-100">
                             <h3 className="text-xl font-bold mb-4 text-gray-900 border-b pb-2">Admin Access Control</h3>
-                            <div className="text-center mb-4">
-                                <p className="text-lg font-semibold">Current Status:</p>
-                                <p className={`text-2xl font-bold ${currentAdminStatus ? 'text-green-600' : 'text-red-600'}`}>
-                                    {currentAdminStatus ? 'UNLOCKED' : 'LOCKED'}
-                                </p>
-                            </div>
-                            <div className="space-y-4">
-                                <div>
-                                    <label htmlFor="adminPassword" className="block text-sm font-medium text-gray-700 mb-1">Password to Toggle</label>
-                                    <input
-                                        type="password"
-                                        id="adminPassword"
-                                        value={password}
-                                        onChange={(e) => { setPassword(e.target.value); setError(''); }}
-                                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                                        onKeyPress={(e) => { if (e.key === 'Enter') handleToggleAdminStatus(); }}
-                                        disabled={loading}
-                                    />
-                                    {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+                            {!isCurrentUserFixedAdmin ? (
+                                <div className="text-center text-red-600 font-semibold mb-4">
+                                    Only the designated admin user can toggle this access.
                                 </div>
-                                <div className="flex justify-end space-x-3">
-                                    <button
-                                        type="button"
-                                        onClick={onClose}
-                                        className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50"
-                                        disabled={loading}
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={handleToggleAdminStatus}
-                                        className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                        disabled={loading}
-                                    >
-                                        {loading ? 'Toggling...' : 'Toggle Admin Status'}
-                                    </button>
-                                </div>
-                            </div>
+                            ) : (
+                                <>
+                                    <div className="text-center mb-4">
+                                        <p className="text-lg font-semibold">Current Status:</p>
+                                        <p className={`text-2xl font-bold ${currentAdminStatus ? 'text-green-600' : 'text-red-600'}`}>
+                                            {currentAdminStatus ? 'UNLOCKED' : 'LOCKED'}
+                                        </p>
+                                    </div>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label htmlFor="adminPassword" className="block text-sm font-medium text-gray-700 mb-1">Password to Toggle</label>
+                                            <input
+                                                type="password"
+                                                id="adminPassword"
+                                                value={password}
+                                                onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                                                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                                                onKeyPress={(e) => { if (e.key === 'Enter') handleToggleAdminStatus(); }}
+                                                disabled={loading}
+                                            />
+                                            {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+                                        </div>
+                                        <div className="flex justify-end space-x-3">
+                                            <button
+                                                type="button"
+                                                onClick={onClose}
+                                                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50"
+                                                disabled={loading}
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={handleToggleAdminStatus}
+                                                className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                disabled={loading}
+                                            >
+                                                {loading ? 'Toggling...' : 'Toggle Admin Status'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
                 );
@@ -3324,7 +3339,8 @@
                 const [isAuthReady, setIsAuthReady] = useState(false);
                 const [loading, setLoading] = useState(true);
                 const [error, setError] = useState(null);
-                const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false); // Per-user admin status
+                const [fixedAdminStatus, setFixedAdminStatus] = useState(false); // State for the FIXED_ADMIN_UID's status
+                const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false); // Derived admin status for current user
                 const [showAdminLoginModal, setShowAdminLoginModal] = useState(false);
 
                 useEffect(() => {
@@ -3345,6 +3361,23 @@
                             setFirebaseApp(app);
                             setDb(firestore);
                             setAuth(authentication);
+
+                            // Listener for the FIXED_ADMIN_UID's status
+                            const fixedAdminStatusDocRef = doc(firestore, `artifacts/${appId}/users/${FIXED_ADMIN_UID}/adminStatus`, 'userAdmin');
+                            const unsubscribeFixedAdmin = onSnapshot(fixedAdminStatusDocRef, (docSnap) => {
+                                if (docSnap.exists()) {
+                                    setFixedAdminStatus(docSnap.data().isEnabled || false);
+                                } else {
+                                    // Initialize FIXED_ADMIN_UID's admin status as locked if it doesn't exist
+                                    setDoc(fixedAdminStatusDocRef, { isEnabled: false }, { merge: true })
+                                        .then(() => setFixedAdminStatus(false))
+                                        .catch(err => console.error("Error initializing fixed admin status:", err));
+                                }
+                            }, (err) => {
+                                console.error("Error fetching fixed admin status:", err);
+                                // Optionally show a toast for this specific error
+                            });
+
 
                             // Listen for authentication state changes and sign in
                             const unsubscribeAuth = onAuthStateChanged(authentication, async (user) => {
@@ -3370,30 +3403,13 @@
                                 setUserId(currentUserId);
                                 setIsAuthReady(true);
                                 setLoading(false);
-
-                                // Once userId is set, listen for this user's admin status
-                                if (currentUserId) {
-                                    const userAdminStatusDocRef = doc(firestore, `artifacts/${appId}/users/${currentUserId}/adminStatus`, 'userAdmin');
-                                    const unsubscribeAdmin = onSnapshot(userAdminStatusDocRef, (docSnap) => {
-                                        if (docSnap.exists()) {
-                                            setIsAdminLoggedIn(docSnap.data().isEnabled || false);
-                                        } else {
-                                            // Initialize user's admin status as locked if it doesn't exist
-                                            setDoc(userAdminStatusDocRef, { isEnabled: false }, { merge: true })
-                                                .then(() => setIsAdminLoggedIn(false))
-                                                .catch(err => console.error("Error initializing user admin status:", err));
-                                        }
-                                    }, (err) => {
-                                        console.error("Error fetching user admin status:", err);
-                                    });
-                                    return () => {
-                                        unsubscribeAuth();
-                                        unsubscribeAdmin(); // Cleanup for admin status listener
-                                    };
-                                }
                             });
 
-                            return () => unsubscribeAuth(); // Initial cleanup for auth listener
+                            // Cleanup function for both listeners
+                            return () => {
+                                unsubscribeAuth();
+                                unsubscribeFixedAdmin();
+                            };
                         } catch (err) {
                             console.error("Failed to initialize Firebase:", err);
                             setError("Failed to initialize Firebase. Please check console for details.");
@@ -3402,22 +3418,17 @@
                     };
 
                     initializeFirebase();
-                }, []);
+                }, []); // Empty dependency array means this runs once on mount
 
-                // The handleAdminLoginSuccess is now integrated into AdminLoginModal's Firestore update.
-                // This function is still here but will be removed as it's no longer directly called.
-                // const handleAdminLoginSuccess = () => {
-                //     setIsAdminLoggedIn(true);
-                //     setShowAdminLoginModal(false);
-                // };
+                // Derived state for isAdminLoggedIn based on current userId and fixedAdminStatus
+                useEffect(() => {
+                    setIsAdminLoggedIn(userId === FIXED_ADMIN_UID && fixedAdminStatus);
+                }, [userId, fixedAdminStatus]);
 
                 const handleLogout = async () => {
                     if (auth) {
                         try {
                             await signOut(auth);
-                            // After signing out, Firebase's onAuthStateChanged will trigger,
-                            // which will then sign in anonymously or with custom token,
-                            // and reset the userId and isAdminLoggedIn state.
                             setView('dashboard');
                         } catch (err) {
                             console.error("Error signing out:", err);
@@ -3478,10 +3489,11 @@
                                     </div>
                                 </footer>
                             </div>
-                            {showAdminLoginModal && userId && ( // Only show modal if userId is available
+                            {showAdminLoginModal && userId && (
                                 <AdminLoginModal
                                     onClose={() => setShowAdminLoginModal(false)}
-                                    currentAdminStatus={isAdminLoggedIn}
+                                    currentAdminStatus={fixedAdminStatus} // Pass the status of the FIXED_ADMIN_UID
+                                    isCurrentUserFixedAdmin={userId === FIXED_ADMIN_UID} // Tell modal if current user is the fixed admin
                                 />
                             )}
                         </ToastProvider>
