@@ -250,12 +250,16 @@
 
             // --- Component Definitions (Ordered from child to parent where possible) ---
 
-            const Header = ({ setView, isAdminLoggedIn, onAdminLogout, onAdminLoginClick }) => {
+            const Header = ({ setView, isAdminLoggedIn, onAdminLogout, onAdminLoginClick, userId }) => {
                 return (
                     <header className="bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-lg rounded-b-lg print:hidden">
                         <div className="container mx-auto p-4 flex flex-col sm:flex-row justify-between items-center">
                             <h1 className="text-3xl font-bold mb-4 sm:mb-0">DLV Electrical Services Co.</h1>
-                            {/* User ID display removed as requested */}
+                            {userId && ( // Display userId if available
+                                <div className="text-sm opacity-75 mt-2 sm:mt-0">
+                                    User ID: <span className="font-mono break-all">{userId}</span>
+                                </div>
+                            )}
                             {!isAdminLoggedIn && (
                                 <div className="mt-2 sm:mt-0">
                                     <button
@@ -1721,7 +1725,25 @@
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                             {/* Company Header Fields */}
-                            {/* Removed Logo Upload Section */}
+                            {/* Added Logo URL Input */}
+                            <div className="col-span-1 md:col-span-2">
+                                <label htmlFor="logoUrl" className="block text-sm font-medium text-gray-700 mb-1">Company Logo URL</label>
+                                <input
+                                    type="text"
+                                    id="logoUrl"
+                                    name="logoUrl"
+                                    value={templateData.logoUrl}
+                                    onChange={handleChange}
+                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                                    placeholder="e.g., https://example.com/your-logo.png"
+                                />
+                                {templateData.logoUrl && (
+                                    <div className="mt-2">
+                                        <p className="text-sm text-gray-600 mb-1">Preview:</p>
+                                        <img src={templateData.logoUrl} alt="Logo Preview" className="max-h-24 object-contain rounded-md shadow-sm border border-gray-200" onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/100x50/cccccc/ffffff?text=Image+Error'; }} />
+                                    </div>
+                                )}
+                            </div>
                             <div>
                                 <label htmlFor="companyName" className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
                                 <input type="text" id="companyName" name="companyName" value={templateData.companyName} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
@@ -2701,6 +2723,7 @@
                                     type="button"
                                     onClick={handleGenerateReport}
                                     className="px-5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+                                    disabled={!selectedProject || selectedExpenses.length === 0}
                                 >
                                     Generate Billing Report
                                 </button>
@@ -2824,7 +2847,7 @@
                                     <h3 className="text-xl font-bold mb-4 text-gray-900">Select Expenses for {selectedProject.projectName}</h3>
                                     <div className="overflow-x-auto overflow-y-auto max-h-60 rounded-lg border border-gray-200 shadow-sm">
                                         <table className="min-w-full divide-y divide-gray-200">
-                                            <thead className="bg-gray-100">
+                                            <thead className="bg-gray-50">
                                                 <tr>
                                                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Include</th>
                                                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
@@ -3305,10 +3328,15 @@
                                 if (user) {
                                     setUserId(user.uid);
                                 } else {
-                                    if (initialAuthToken) {
-                                        await signInWithCustomToken(authentication, initialAuthToken);
-                                    } else {
-                                        await signInAnonymously(authentication);
+                                    try {
+                                        if (initialAuthToken) {
+                                            await signInWithCustomToken(authentication, initialAuthToken);
+                                        } else {
+                                            await signInAnonymously(authentication);
+                                        }
+                                    } catch (authError) {
+                                        console.error("Firebase Auth error during sign-in:", authError);
+                                        setError(`Authentication failed: ${authError.message}`);
                                     }
                                 }
                                 setIsAuthReady(true);
@@ -3363,7 +3391,14 @@
                     <FirebaseContext.Provider value={{ db, auth, userId, isAuthReady, firebaseApp }}>
                         <ToastProvider> {/* Wrap the entire app with ToastProvider */}
                             <div className="min-h-screen bg-gray-100 font-sans antialiased text-gray-800">
-                                <Header setView={setView} isAdminLoggedIn={isAdminLoggedIn} onAdminLogout={handleAdminLogout} onAdminLoginClick={() => setShowAdminLoginModal(true)} />
+                                <Header setView={setView} isAdminLoggedIn={isAdminLoggedIn} onAdminLogout={handleAdminLogout} onAdminLoginClick={() => setShowAdminLoginModal(true)} userId={userId} />
+                                {isAuthReady && !window.__initial_auth_token && (
+                                    <div className="container mx-auto mt-4 p-3 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-lg shadow-sm print:hidden">
+                                        <p className="font-semibold">Data Sync Notice:</p>
+                                        <p className="text-sm">You are currently signed in anonymously. Data entered will only be accessible from this specific browser session. For cross-device data synchronization, please ensure the application is run in an environment that provides a persistent authentication token (e.g., within the Canvas environment).</p>
+                                        <p className="text-xs mt-2">Your current anonymous User ID is: <span className="font-mono font-bold">{userId}</span></p>
+                                    </div>
+                                )}
                                 <main className="container mx-auto p-4 sm:p-6 lg:p-8">
                                     {view === 'dashboard' && <Dashboard setView={setView} setSelectedProjectId={setSelectedProjectId} isAdminLoggedIn={isAdminLoggedIn} />}
                                     {view === 'projects' && <Projects setView={setView} setSelectedProjectId={setSelectedProjectId} isAdminLoggedIn={isAdminLoggedIn} />}
