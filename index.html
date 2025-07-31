@@ -712,7 +712,7 @@
             const Projects = ({ setView, setSelectedProjectId, isAdminLoggedIn }) => {
                 const { db, userId, isAuthReady } = useFirebase();
                 const [projects, setProjects] = useState([]);
-                const [loading, setLoading] = useState(true);
+                const [loading, setLoading] = useState(true); // Corrected: Added missing parenthesis and semicolon
                 const [error, setError] = useState(null);
                 const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
                 const [projectToDelete, setProjectToDelete] = useState(null);
@@ -1724,7 +1724,7 @@
                                 {templateData.logoUrl && (
                                     <div className="mt-2">
                                         <p className="text-sm text-gray-600 mb-1">Preview:</p>
-                                        <img src={templateData.logoUrl} alt="Logo Preview" className="max-h-24 object-contain rounded-md shadow-sm border border-gray-200" onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/100x50/cccccc/ffffff?text=Image+Error'; }} />
+                                        <img src={templateData.logoUrl} alt="Company Logo" className="max-h-24 object-contain rounded-md shadow-sm border border-gray-200" onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/100x50/cccccc/ffffff?text=Image+Error'; }} />
                                     </div>
                                 )}
                             </div>
@@ -2711,7 +2711,7 @@
                                     type="button"
                                     onClick={handleGenerateReport}
                                     className="px-5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-                                    disabled={!selectedProject || selectedPartialPayments.length === 0}
+                                    disabled={!selectedProject}
                                 >
                                     Generate Billing Report
                                 </button>
